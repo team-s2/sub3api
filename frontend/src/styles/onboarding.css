@@ -35,7 +35,7 @@
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
   border-radius: 12px !important;
   padding: 0 !important;
-  max-width: min(440px, 90vw) !important; /* Responsive on small screens */
+  max-width: min(480px, 92vw) !important; /* Responsive on small screens；英文文案更长，略放宽 */
   color: #1f2937 !important;
   font-family: ui-sans-serif, system-ui, sans-serif !important;
   overflow: hidden !important;
@@ -63,6 +63,9 @@
   color: #111827 !important;
   line-height: 1.3 !important;
   padding-right: 100px !important; /* Ensure title doesn't overlap Skip/Close */
+  overflow-wrap: anywhere !important; /* 英文长单词不撑破标题区 */
+  word-break: break-word !important;
+  min-width: 0 !important;
 }
 .dark .driver-popover-title-text { color: #ffffff !important; }
 
@@ -96,14 +99,19 @@
   margin: 0 !important;
   line-height: 1.6 !important;
   background-color: transparent !important;
+  overflow-wrap: anywhere !important; /* 英文长句/长单词自动断行，避免溢出被裁 */
+  word-break: break-word !important;
+  min-width: 0 !important;
 }
 .dark .theme-tour-popover .driver-popover-description { color: #cbd5e1 !important; }
 
 /* 5. Footer Area - Flex Row with Left/Right Containers */
 .theme-tour-popover .driver-popover-footer {
   display: flex !important;
+  flex-wrap: wrap !important; /* 英文文案更长时换行，而不是被 overflow:hidden 裁掉 */
   align-items: center !important;
   justify-content: space-between !important; /* Push Left and Right apart */
+  gap: 10px 16px !important;
   padding: 16px 24px !important;
   background-color: #f9fafb !important;
   border-top: 1px solid #f3f4f6 !important;
@@ -117,15 +125,20 @@
 /* Left Container: Progress + Shortcuts */
 .footer-left {
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
-  gap: 16px !important;
+  gap: 8px 16px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
 }
 
 /* Right Container: Buttons */
 .footer-right {
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
   gap: 8px !important;
+  flex: 0 0 auto !important;
 }
 
 /* Progress */
@@ -141,11 +154,13 @@
 /* Shortcuts (Divider + Keys) */
 .footer-shortcuts {
   display: flex !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
-  gap: 12px !important;
-  padding-left: 16px !important;
-  border-left: 1px solid #e5e7eb !important;
-  height: 20px !important;
+  gap: 8px 12px !important;
+  padding-left: 0 !important;
+  border-left: none !important; /* 窄宽度/英文下不再用分隔线，避免挤压 */
+  height: auto !important;
+  min-width: 0 !important;
 }
 .dark .footer-shortcuts { border-left-color: #334155 !important; }
 
@@ -155,7 +170,8 @@
   gap: 4px !important;
   font-size: 12px !important;
   color: #6b7280 !important;
-  white-space: nowrap !important;
+  white-space: normal !important; /* 英文 "Switch page"/"Exit" 允许换行 */
+  min-width: 0 !important;
 }
 .dark .shortcut-item { color: #94a3b8 !important; }
 
