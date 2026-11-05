@@ -519,6 +519,9 @@ func registerZCodeOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		zcode.POST("/oauth/auth-url", h.Admin.ZCodeOAuth.GenerateAuthURL)
 		zcode.POST("/oauth/poll", h.Admin.ZCodeOAuth.Poll)
 		zcode.POST("/oauth/accounts", h.Admin.ZCodeOAuth.CreateAccount)
+		zcode.GET("/accounts/:id/reset-cards", h.Admin.ZCodeOAuth.GetResetCards)
+		zcode.POST("/accounts/:id/reset", h.Admin.ZCodeOAuth.UseResetCard)
+		zcode.PUT("/accounts/:id/settings", h.Admin.ZCodeOAuth.UpdateSettings)
 	}
 }
 

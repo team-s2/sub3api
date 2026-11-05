@@ -316,6 +316,13 @@ func ProvideCNProviderBalanceService(
 	return NewCNProviderBalanceService(accountRepo, proxyRepo, httpUpstream, cfg)
 }
 
+// ProvideZCodeResetService 构造并启动 ZCode 重置卡巡检。
+func ProvideZCodeResetService(accountRepo AccountRepository, proxyRepo ProxyRepository) *ZCodeResetService {
+	svc := NewZCodeResetService(accountRepo, proxyRepo)
+	svc.Start()
+	return svc
+}
+
 // ProvideCNProviderBalanceCheckService 构造并启动周期余额/额度检测任务。
 // payg 账号探余额（低余额停调）；coding plan 账号探 5h/weekly 滚动窗口
 // （落 extra 快照供调度阈值评估自动停调）。
@@ -895,6 +902,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
 	NewZCodeOAuthService,
+	ProvideZCodeResetService,
 	NewGeminiOAuthService,
 	ProvideGeminiCachedContentService,
 	NewGeminiQuotaService,

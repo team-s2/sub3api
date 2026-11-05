@@ -54,6 +54,7 @@ export interface ZCodeCreateAccountRequest {
   concurrency?: number
   priority?: number
   group_ids?: number[]
+  peak_pause?: boolean
 }
 
 const ZCODE_AUTHORIZATION_TIMEOUT_MS = 120_000

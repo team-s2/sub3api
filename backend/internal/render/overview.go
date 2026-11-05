@@ -236,6 +236,8 @@ func subscriptionBadge(state string) (string, Color) {
 		return "凭据失效", over
 	case "quota_exhausted":
 		return "额度耗尽", warn
+	case "peak_paused":
+		return "高峰暂停", warn
 	case "network_error":
 		return "网络错误", over
 	default:

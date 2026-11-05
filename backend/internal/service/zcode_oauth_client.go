@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 )
 
 // ZCode OAuth 协议常量。
@@ -30,9 +33,11 @@ import (
 const (
 	// ZCodeRootURL 是 ZCode CLI 授权与 ultra 推理端点的根地址。
 	ZCodeRootURL = "https://zcode.z.ai"
-	// ZCodeUltraAnthropicBaseURL 是 ultra 推理端点基址（Anthropic Messages 协议，
-	// 以 CodingPlan key 鉴权）。官方按 1.5x 配额口径计量，即扣减 ≈0.67x 直连。
-	ZCodeUltraAnthropicBaseURL = "https://zcode.z.ai/api/v1/ultra/anthropic"
+	// zcodeUltraBigModelBaseURL / zcodeUltraZAIBaseURL 是两个站点的 ultra 推理端点基址
+	// （Anthropic Messages 协议，以 CodingPlan key 鉴权）。官方按 1.5x 配额口径计量，
+	// 即扣减 ≈0.67x 直连。
+	zcodeUltraBigModelBaseURL = "https://zcode.z.ai/api/v1/ultra/anthropic"
+	zcodeUltraZAIBaseURL      = "https://zcode.z.ai/api/v1/ultra-zai/anthropic"
 
 	// ZCodeSiteZAI / ZCodeSiteBigModel 是 ZCode OAuth 的两个登录入口。
 	ZCodeSiteZAI      = "zai"
@@ -44,11 +49,12 @@ const (
 
 	zcodeCLIInitPath = "/api/v1/oauth/cli/init"
 	zcodeCLIPollPath = "/api/v1/oauth/cli/poll/"
-	zcodeTokenPath   = "/api/v1/oauth/token"
 
 	// zcodeDefaultPollInterval 与 zcodeDefaultFlowTTL 是上游缺省字段时的兜底。
 	zcodeDefaultPollInterval = 5 * time.Second
 	zcodeDefaultFlowTTL      = 10 * time.Minute
+
+	zcodeRequestTimeout = 60 * time.Second
 )
 
 // ZCodeSiteRootURL 返回站点业务接口根地址。
@@ -59,12 +65,20 @@ func ZCodeSiteRootURL(site string) string {
 	return "https://api.z.ai"
 }
 
-// ZCodeSiteBaseURL 返回站点原生 Anthropic 直连基址（relay 模式用，仅供展示/对照）。
-func ZCodeSiteBaseURL(site string) string {
+// ZCodeUltraBaseURL 返回站点的 ultra 推理端点基址。
+func ZCodeUltraBaseURL(site string) string {
 	if site == ZCodeSiteBigModel {
-		return "https://open.bigmodel.cn/api/anthropic"
+		return zcodeUltraBigModelBaseURL
 	}
-	return "https://api.z.ai/api/anthropic"
+	return zcodeUltraZAIBaseURL
+}
+
+// zcodeOpenPlatformURL 返回站点开放平台根地址，订阅列表在这里而不是业务站。
+func zcodeOpenPlatformURL(site string) string {
+	if site == ZCodeSiteBigModel {
+		return "https://open.bigmodel.cn"
+	}
+	return "https://api.z.ai"
 }
 
 // IsValidZCodeSite 报告站点标识是否合法。
@@ -127,6 +141,8 @@ type zcodeAPIError struct {
 	Status  int
 	Code    string
 	Message string
+	// Data 保留信封 data，部分业务码（如领券的 3301）在这里带下次时间。
+	Data json.RawMessage
 }
 
 func (e *zcodeAPIError) Error() string {
@@ -156,8 +172,10 @@ func (c *ZCodeOAuthClient) BeginLogin(ctx context.Context, site, proxyURL string
 	}
 	bearer, device := deriveZCodeStateValues(seed)
 
-	data, err := zcodeAPICall(ctx, proxyURL, http.MethodPost, ZCodeRootURL+zcodeCLIInitPath,
-		"Bearer "+bearer, device, nil, map[string]string{"provider": site})
+	data, err := zcodeAPICall(ctx, zcodeRequest{
+		Method: http.MethodPost, URL: ZCodeRootURL + zcodeCLIInitPath, Auth: "Bearer " + bearer, Device: device,
+		ProxyURL: proxyURL, Body: map[string]string{"provider": site},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -212,13 +230,14 @@ func (c *ZCodeOAuthClient) PollLogin(ctx context.Context, session *ZCodeLoginSes
 	if session == nil {
 		return ZCodePollPending, nil, fmt.Errorf("missing zcode login session")
 	}
-	data, err := zcodeAPICall(ctx, session.ProxyURL, http.MethodGet,
-		ZCodeRootURL+zcodeCLIPollPath+url.PathEscape(session.FlowID),
-		"Bearer "+session.Bearer, session.Device, nil, nil)
+	data, err := zcodeAPICall(ctx, zcodeRequest{
+		Method: http.MethodGet, URL: ZCodeRootURL + zcodeCLIPollPath + url.PathEscape(session.FlowID),
+		Auth: "Bearer " + session.Bearer, Device: session.Device, ProxyURL: session.ProxyURL,
+	})
 	if err != nil {
 		// 4xx 视为该流程终止，其余（网络抖动、5xx、429）保持 pending 由前端继续轮询。
 		var upstream *zcodeAPIError
-		if ok := asZCodeAPIError(err, &upstream); ok && upstream.Status >= 400 && upstream.Status < 500 &&
+		if errors.As(err, &upstream) && upstream.Status >= 400 && upstream.Status < 500 &&
 			upstream.Status != http.StatusRequestTimeout && upstream.Status != http.StatusTooManyRequests {
 			return ZCodePollDeclined, nil, err
 		}
@@ -282,18 +301,32 @@ func (c *ZCodeOAuthClient) PollLogin(ctx context.Context, session *ZCodeLoginSes
 	return ZCodePollReady, credential, nil
 }
 
+// zcodeBizSession 是一次登录后调用站点业务接口的上下文。
+type zcodeBizSession struct {
+	site     string
+	token    string
+	proxyURL string
+}
+
+func (b zcodeBizSession) call(ctx context.Context, method, path string, headers http.Header, body any) (json.RawMessage, error) {
+	return zcodeAPICall(ctx, zcodeRequest{
+		Method: method, URL: ZCodeSiteRootURL(b.site) + path, Auth: b.token, Headers: headers, ProxyURL: b.proxyURL, Body: body,
+	})
+}
+
 // ProvisionAPIKey 用登录身份在业务接口上复用/开通 CodingPlan 项目 key。
 // 开通成功时填充 credential.APIKey / Plan / Org / Project / Team。
-func (c *ZCodeOAuthClient) ProvisionAPIKey(ctx context.Context, credential *ZCodeCredential) error {
+func (c *ZCodeOAuthClient) ProvisionAPIKey(ctx context.Context, credential *ZCodeCredential, proxyURL string) error {
 	if credential == nil {
-		return fmt.Errorf("missing zcode credential")
+		return errors.New("missing zcode credential")
 	}
-	root := ZCodeSiteRootURL(credential.Site)
-	bizToken := credential.SiteAccessToken
+	biz := zcodeBizSession{site: credential.Site, token: credential.SiteAccessToken, proxyURL: proxyURL}
 	if credential.Site == ZCodeSiteZAI {
 		// z.ai 需要先用站点 access_token 换业务令牌。
-		data, err := zcodeAPICall(ctx, "", http.MethodPost, "https://api.z.ai/api/auth/z/login",
-			"", "", nil, map[string]string{"token": credential.SiteAccessToken})
+		data, err := zcodeAPICall(ctx, zcodeRequest{
+			Method: http.MethodPost, URL: "https://api.z.ai/api/auth/z/login", ProxyURL: proxyURL,
+			Body: map[string]string{"token": credential.SiteAccessToken},
+		})
 		if err != nil {
 			return fmt.Errorf("zai business login failed: %w", err)
 		}
@@ -301,34 +334,32 @@ func (c *ZCodeOAuthClient) ProvisionAPIKey(ctx context.Context, credential *ZCod
 			Access string `json:"access_token"`
 		}
 		if err := json.Unmarshal(data, &payload); err != nil || payload.Access == "" {
-			return fmt.Errorf("zai business login returned no access token")
+			return errors.New("zai business login returned no access token")
 		}
-		bizToken = "Bearer " + payload.Access
+		biz.token = "Bearer " + payload.Access
 	}
 
-	customer, err := c.fetchCustomer(ctx, root, bizToken)
+	customer, err := biz.fetchCustomer(ctx)
 	if err != nil {
 		return err
 	}
 
 	// 先尝试个人套餐（默认机构 / 默认项目，排除团队项目类型 "2"）。
 	if org, project, ok := zcodePickPersonalScope(customer); ok {
-		key, keyErr := c.ensureProjectAPIKey(ctx, root, bizToken, org, project, false)
+		key, keyErr := biz.ensureProjectAPIKey(ctx, org, project, false)
 		if keyErr == nil {
 			credential.APIKey = key
 			credential.Org = org
 			credential.Project = project
-			if plan := c.fetchSubscriptionPlan(ctx, root, key); plan != "" {
-				credential.Plan = plan
-			}
+			credential.Plan = biz.fetchSubscriptionPlan(ctx, key)
 			return nil
 		}
 		err = keyErr
 	}
 
 	// 再尝试团队席位。
-	if org, project, plan, ok := c.findTeamSeat(ctx, root, bizToken, customer); ok {
-		key, keyErr := c.ensureProjectAPIKey(ctx, root, bizToken, org, project, true)
+	if org, project, plan, ok := biz.findTeamSeat(ctx, customer); ok {
+		key, keyErr := biz.ensureProjectAPIKey(ctx, org, project, true)
 		if keyErr != nil {
 			return keyErr
 		}
@@ -342,7 +373,7 @@ func (c *ZCodeOAuthClient) ProvisionAPIKey(ctx context.Context, credential *ZCod
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("this account has no GLM Coding Plan subscription")
+	return errors.New("this account has no GLM Coding Plan subscription")
 }
 
 type zcodeCustomerProject struct {
@@ -357,8 +388,8 @@ type zcodeCustomerOrg struct {
 	Projects []zcodeCustomerProject
 }
 
-func (c *ZCodeOAuthClient) fetchCustomer(ctx context.Context, root, bizToken string) ([]zcodeCustomerOrg, error) {
-	data, err := zcodeAPICall(ctx, "", http.MethodGet, root+"/api/biz/customer/getCustomerInfo", bizToken, "", nil, nil)
+func (b zcodeBizSession) fetchCustomer(ctx context.Context) ([]zcodeCustomerOrg, error) {
+	data, err := b.call(ctx, http.MethodGet, "/api/biz/customer/getCustomerInfo", nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("account lookup failed: %w", err)
 	}
@@ -424,15 +455,13 @@ func zcodePickPersonalScope(orgs []zcodeCustomerOrg) (string, string, bool) {
 }
 
 // findTeamSeat 在团队项目里寻找生效且席位有效的 CodingPlan。
-func (c *ZCodeOAuthClient) findTeamSeat(ctx context.Context, root, bizToken string, orgs []zcodeCustomerOrg) (string, string, string, bool) {
+func (b zcodeBizSession) findTeamSeat(ctx context.Context, orgs []zcodeCustomerOrg) (string, string, string, bool) {
 	for _, org := range orgs {
 		for _, project := range org.Projects {
 			if org.ID == "" || project.ID == "" || project.Type != "2" {
 				continue
 			}
-			headers := zcodeTeamHeaders(org.ID, project.ID)
-			data, err := zcodeAPICall(ctx, "", http.MethodGet,
-				root+"/api/biz/team/subscribe/product/querySubscribeDetail", bizToken, "", headers, nil)
+			data, err := b.call(ctx, http.MethodGet, "/api/biz/team/subscribe/product/querySubscribeDetail", zcodeTeamHeaders(org.ID, project.ID), nil)
 			if err != nil {
 				continue
 			}
@@ -468,13 +497,13 @@ func zcodeTeamHeaders(org, project string) http.Header {
 }
 
 // ensureProjectAPIKey 复用或新建项目 API key，并取回完整明文（id.secret）。
-func (c *ZCodeOAuthClient) ensureProjectAPIKey(ctx context.Context, root, bizToken, org, project string, team bool) (string, error) {
-	endpoint := root + "/api/biz/v1/organization/" + url.PathEscape(org) + "/projects/" + url.PathEscape(project) + "/api_keys"
+func (b zcodeBizSession) ensureProjectAPIKey(ctx context.Context, org, project string, team bool) (string, error) {
+	endpoint := "/api/biz/v1/organization/" + url.PathEscape(org) + "/projects/" + url.PathEscape(project) + "/api_keys"
 	var headers http.Header
 	if team {
 		headers = zcodeTeamHeaders(org, project)
 	}
-	data, err := zcodeAPICall(ctx, "", http.MethodGet, endpoint, bizToken, "", headers, nil)
+	data, err := b.call(ctx, http.MethodGet, endpoint, headers, nil)
 	if err != nil {
 		return "", fmt.Errorf("project key lookup failed: %w", err)
 	}
@@ -503,7 +532,7 @@ func (c *ZCodeOAuthClient) ensureProjectAPIKey(ctx context.Context, root, bizTok
 		if team {
 			body["keyType"] = 2
 		}
-		created, createErr := zcodeAPICall(ctx, "", http.MethodPost, endpoint, bizToken, "", headers, body)
+		created, createErr := b.call(ctx, http.MethodPost, endpoint, headers, body)
 		if createErr != nil {
 			return "", fmt.Errorf("project key creation failed: %w", createErr)
 		}
@@ -518,7 +547,7 @@ func (c *ZCodeOAuthClient) ensureProjectAPIKey(ctx context.Context, root, bizTok
 			return "", fmt.Errorf("project key response has no identifier")
 		}
 	}
-	copied, err := zcodeAPICall(ctx, "", http.MethodGet, endpoint+"/copy/"+url.PathEscape(keyID), bizToken, "", headers, nil)
+	copied, err := b.call(ctx, http.MethodGet, endpoint+"/copy/"+url.PathEscape(keyID), headers, nil)
 	if err != nil {
 		return "", fmt.Errorf("project key secret lookup failed: %w", err)
 	}
@@ -532,8 +561,10 @@ func (c *ZCodeOAuthClient) ensureProjectAPIKey(ctx context.Context, root, bizTok
 }
 
 // fetchSubscriptionPlan 用项目 key 查订阅列表，返回生效产品名（尽力而为）。
-func (c *ZCodeOAuthClient) fetchSubscriptionPlan(ctx context.Context, root, apiKey string) string {
-	data, err := zcodeAPICall(ctx, "", http.MethodGet, root+"/api/biz/subscription/list", apiKey, "", nil, nil)
+func (b zcodeBizSession) fetchSubscriptionPlan(ctx context.Context, apiKey string) string {
+	data, err := zcodeAPICall(ctx, zcodeRequest{
+		Method: http.MethodGet, URL: zcodeOpenPlatformURL(b.site) + "/api/biz/subscription/list", Auth: apiKey, ProxyURL: b.proxyURL,
+	})
 	if err != nil {
 		return ""
 	}
@@ -564,36 +595,47 @@ func deriveZCodeStateValues(seed []byte) (string, string) {
 	return hex.EncodeToString(seed), device
 }
 
-// zcodeAPICall 调用 ZCode 业务接口并解出 {code,msg,data} 信封里的 data。
-func zcodeAPICall(ctx context.Context, proxyURL, method, target, auth, device string, extra http.Header, body any) (json.RawMessage, error) {
+// zcodeRequest 描述一次 ZCode / 站点业务接口调用。
+type zcodeRequest struct {
+	Method   string
+	URL      string
+	Auth     string
+	Device   string
+	Headers  http.Header
+	ProxyURL string
+	Body     any
+}
+
+// zcodeAPICall 调用接口并解出 {code,msg,data} 信封里的 data；业务失败返回 *zcodeAPIError。
+func zcodeAPICall(ctx context.Context, call zcodeRequest) (json.RawMessage, error) {
 	var payload []byte
-	if body != nil {
-		encoded, err := json.Marshal(body)
+	if call.Body != nil {
+		encoded, err := json.Marshal(call.Body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid request body: %w", err)
 		}
 		payload = encoded
 	}
-	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, call.Method, call.URL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "ZCode/3.2.5")
-	if auth != "" {
-		req.Header.Set("Authorization", auth)
+	if call.Auth != "" {
+		req.Header.Set("Authorization", call.Auth)
 	}
-	if device != "" {
-		req.Header.Set("X-Device-Mid", device)
+	if call.Device != "" {
+		req.Header.Set("X-Device-Mid", call.Device)
 	}
-	for key, values := range extra {
+	for key, values := range call.Headers {
 		req.Header[key] = append([]string(nil), values...)
 	}
 
-	client, err := zcodeHTTPClient(proxyURL)
+	client, err := httpclient.GetClient(httpclient.Options{ProxyURL: call.ProxyURL, Timeout: zcodeRequestTimeout})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("zcode http client: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -614,42 +656,13 @@ func zcodeAPICall(ctx context.Context, proxyURL, method, target, auth, device st
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return nil, &zcodeAPIError{Status: resp.StatusCode, Message: strings.TrimSpace(string(raw))}
 		}
-		return nil, fmt.Errorf("zcode returned a non-JSON response")
+		return nil, errors.New("zcode returned a non-JSON response")
 	}
 	code := zcodeJSONScalar(envelope.Code)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || (code != "" && code != "0" && code != "200") {
-		return nil, &zcodeAPIError{Status: resp.StatusCode, Code: code, Message: envelope.Msg}
+		return nil, &zcodeAPIError{Status: resp.StatusCode, Code: code, Message: envelope.Msg, Data: envelope.Data}
 	}
 	return envelope.Data, nil
-}
-
-// zcodeHTTPClient 按需构造带代理的 http.Client。
-func zcodeHTTPClient(proxyURL string) (*http.Client, error) {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ResponseHeaderTimeout = 60 * time.Second
-	if strings.TrimSpace(proxyURL) != "" {
-		parsed, err := url.Parse(proxyURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid proxy url: %w", err)
-		}
-		transport.Proxy = http.ProxyURL(parsed)
-	}
-	return &http.Client{Transport: transport, Timeout: 60 * time.Second}, nil
-}
-
-func asZCodeAPIError(err error, target **zcodeAPIError) bool {
-	for err != nil {
-		if typed, ok := err.(*zcodeAPIError); ok {
-			*target = typed
-			return true
-		}
-		unwrapper, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = unwrapper.Unwrap()
-	}
-	return false
 }
 
 // zcodeJSONScalar 把可能是字符串/数字/布尔/对象的 JSON 值转成字符串。

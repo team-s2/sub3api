@@ -211,6 +211,9 @@ func (a *Account) IsSchedulable() bool {
 	if a.SupportsAccountQuota() && a.IsQuotaExceeded() {
 		return false
 	}
+	if a.IsZCodePeakPaused(now) {
+		return false
+	}
 	return true
 }
 
@@ -1700,7 +1703,7 @@ func (a *Account) GetCodingPlanProvider() string {
 	switch {
 	case isKimiCodingBaseURL(a.GetOpenAIBaseURL()):
 		return PlatformKimi
-	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "api.z.ai"):
+	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "api.z.ai"), strings.Contains(baseURL, "zcode.z.ai"):
 		return PlatformZhipu
 	case strings.Contains(baseURL, "minimax.io"),
 		strings.Contains(baseURL, "minimaxi.com"),

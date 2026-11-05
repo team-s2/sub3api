@@ -62,7 +62,9 @@ func (a *App) quota(ctx context.Context, event onebot.Event, peer Peer, args []s
 	}
 	rows := make([]render.QuotaRow, 0, len(shown))
 	for _, account := range shown {
-		rows = append(rows, quotaRow(account, usage[account.ID], usageErrors[account.ID], stats[account.ID]))
+		row := quotaRow(account, usage[account.ID], usageErrors[account.ID], stats[account.ID])
+		a.addCodingPlanQuota(ctx, account, &row)
+		rows = append(rows, row)
 	}
 	png, err := render.Quota(rows, imageZone, "", time.Now())
 	if err != nil {
@@ -103,6 +105,48 @@ func quotaRow(account *service.Account, usage *service.UsageInfo, usageError str
 		row.Issue = "暂无额度数据"
 	}
 	return row
+}
+
+// addCodingPlanQuota fills in what the generic usage service cannot see: Coding
+// Plan windows come from the provider's quota endpoint, cards from ZCode.
+func (a *App) addCodingPlanQuota(ctx context.Context, account *service.Account, row *render.QuotaRow) {
+	if account.GetCodingPlanProvider() != "" {
+		if result, err := a.cnQuota.QueryUsageForAccount(ctx, account); err == nil && result.Success {
+			row.Issue = ""
+			if result.PlanLevel != "" {
+				row.Plan = account.Platform + " " + result.PlanLevel
+			}
+			for _, tier := range result.Tiers {
+				switch tier.Window {
+				case "5h":
+					row.FiveHour = codingPlanWindow(tier, fiveHours)
+				case "weekly":
+					row.Weekly = codingPlanWindow(tier, sevenDays)
+				}
+			}
+		}
+	}
+	if !account.IsZCodeAccount() {
+		return
+	}
+	row.Cards = &render.QuotaCards{}
+	inventory, err := a.resets.Inventory(ctx, account.ID, false)
+	if err != nil {
+		row.Cards.Error = err.Error()
+		return
+	}
+	for _, card := range inventory.Cards {
+		row.Cards.Cards = append(row.Cards.Cards, render.QuotaCard{Type: card.Type, ExpiresAt: card.ExpiresAt})
+	}
+}
+
+func codingPlanWindow(tier service.CNQuotaTier, length time.Duration) *render.QuotaWindow {
+	used := tier.UsedPercent
+	window := &render.QuotaWindow{UsedPercent: &used, Length: length}
+	if resetAt, err := time.Parse(time.RFC3339, tier.ResetAt); err == nil {
+		window.ResetsAt = resetAt
+	}
+	return window
 }
 
 func quotaWindow(progress *service.UsageProgress, length time.Duration) *render.QuotaWindow {

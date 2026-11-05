@@ -22,6 +22,8 @@ const helpTemplate = `%[1]s
 - mv <账号> <新名称>：修改名称
 - rm <账号>[,<账号>...]：删除账号
 - oauth <名称> [分组]：通过 OAuth 新建 Codex 账号，cancel 取消
+- reset <账号> [5h|week]：查看 ZCode 重置卡，或使用一张
+- peak <账号>[,<账号>...] on|off：设置 ZCode 账号高峰时段暂停（账号可用 all）
 
 账号可写名称或 ID。`
 
@@ -59,6 +61,10 @@ func (a *App) execute(ctx context.Context, event onebot.Event, peer Peer, text s
 		result = a.remove(ctx, args)
 	case "oauth":
 		result = a.startLogin(ctx, event, args)
+	case "reset":
+		result = a.reset(ctx, args)
+	case "peak":
+		result = a.peak(ctx, args)
 	default:
 		result = "未知命令，请发送 " + a.command + " help 查看帮助。"
 	}
@@ -76,8 +82,8 @@ func (a *App) status(ctx context.Context) string {
 	for i := range accounts {
 		counts[accountState(&accounts[i])]++
 	}
-	return fmt.Sprintf("账号共 %d 个：可调度 %d，已停用 %d，额度耗尽 %d，异常 %d。",
-		len(accounts), counts[stateReady], counts[stateDisabled], counts[stateExhausted], counts[stateInvalid])
+	return fmt.Sprintf("账号共 %d 个：可调度 %d，已停用 %d，高峰暂停 %d，额度耗尽 %d，异常 %d。",
+		len(accounts), counts[stateReady], counts[stateDisabled], counts[statePeakPaused], counts[stateExhausted], counts[stateInvalid])
 }
 
 func (a *App) toggle(ctx context.Context, command string, args []string) string {

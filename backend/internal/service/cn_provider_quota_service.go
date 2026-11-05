@@ -367,7 +367,7 @@ func minimaxQuotaURL(baseURL string) string {
 
 func zhipuQuotaHost(baseURL string) string {
 	switch u := strings.ToLower(baseURL); {
-	case strings.Contains(u, "bigmodel.cn"):
+	case strings.Contains(u, "bigmodel.cn"), strings.HasPrefix(u, zcodeUltraBigModelBaseURL):
 		return "https://open.bigmodel.cn"
 	case strings.Contains(u, "z.ai"):
 		return "https://api.z.ai"

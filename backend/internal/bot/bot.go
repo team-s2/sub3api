@@ -35,31 +35,53 @@ type App struct {
 	usage   *service.AccountUsageService
 	flow    service.UsageFlowReader
 	oauth   *service.OpenAIOAuthService
+	cnQuota *service.CNProviderQuotaService
+	resets  *service.ZCodeResetService
 	sem     chan struct{}
 	mu      sync.Mutex
 	pending map[string]pendingLogin
 }
 
+// Services are the capabilities the commands act through.
+type Services struct {
+	Admin   service.AdminService
+	Usage   *service.AccountUsageService
+	Flow    service.UsageFlowReader
+	OAuth   *service.OpenAIOAuthService
+	CNQuota *service.CNProviderQuotaService
+	Resets  *service.ZCodeResetService
+}
+
 // New creates the command layer.
-func New(cfg config.OneBotConfig, admin service.AdminService, usage *service.AccountUsageService, flow service.UsageFlowReader, oauth *service.OpenAIOAuthService) *App {
+func New(cfg config.OneBotConfig, services Services) *App {
 	return &App{
 		cfg:     cfg,
 		command: "/" + strings.TrimPrefix(cfg.CommandPrefix, "/"),
-		admin:   admin,
-		usage:   usage,
-		flow:    flow,
-		oauth:   oauth,
+		admin:   services.Admin,
+		usage:   services.Usage,
+		flow:    services.Flow,
+		oauth:   services.OAuth,
+		cnQuota: services.CNQuota,
+		resets:  services.Resets,
 		sem:     make(chan struct{}, maxConcurrentCommands),
 		pending: make(map[string]pendingLogin),
 	}
 }
 
 // ProvideOneBotServer returns the bot's server, or nil when the bot is disabled.
-func ProvideOneBotServer(cfg *config.Config, admin service.AdminService, usage *service.AccountUsageService, flow service.UsageFlowReader, oauth *service.OpenAIOAuthService) (*onebot.Server, error) {
+func ProvideOneBotServer(
+	cfg *config.Config,
+	admin service.AdminService,
+	usage *service.AccountUsageService,
+	flow service.UsageFlowReader,
+	oauth *service.OpenAIOAuthService,
+	cnQuota *service.CNProviderQuotaService,
+	resets *service.ZCodeResetService,
+) (*onebot.Server, error) {
 	if !cfg.OneBot.Enabled {
 		return nil, nil
 	}
-	app := New(cfg.OneBot, admin, usage, flow, oauth)
+	app := New(cfg.OneBot, Services{Admin: admin, Usage: usage, Flow: flow, OAuth: oauth, CNQuota: cnQuota, Resets: resets})
 	return onebot.New(onebot.Config{SelfID: cfg.OneBot.SelfID, Token: cfg.OneBot.Token}, func(ctx context.Context, event onebot.Event, peer *onebot.Peer) {
 		app.Handle(ctx, event, peer)
 	})

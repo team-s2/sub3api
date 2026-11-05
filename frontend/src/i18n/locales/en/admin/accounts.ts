@@ -20,6 +20,7 @@ export default {
         endpoint: 'Upstream endpoint',
         accountName: 'Account name',
         concurrency: 'Concurrency',
+        peakPause: 'Pause scheduling during peak hours (weekdays 14:00–18:00 Beijing time, when quota is charged at full price)',
         apiKey: 'CodingPlan API key',
         apiKeyPlaceholder: 'Leave empty to use the auto-provisioned key',
         apiKeyAutoHint: 'A project key was reused/provisioned; leave empty to use it.',

@@ -6,7 +6,8 @@
 ## 目标
 
 管理员可以用 Z.ai / BigModel 账号通过 **ZCode OAuth** 登录并直接生成账号；该账号的推理请求固定走
-**ultra 端点**（`https://zcode.z.ai/api/v1/ultra/anthropic`），官方按 1.5x 配额口径计量。
+**ultra 端点**（BigModel 为 `https://zcode.z.ai/api/v1/ultra/anthropic`，Z.AI 为 `.../ultra-zai/anthropic`），
+官方按 1.5x 配额口径计量。
 
 按需求：**账号正常计费，只改路由**；relay（`zcode-plan` 中转）套餐本次不实现。
 
@@ -51,13 +52,13 @@
   "type": "apikey",
   "credentials": {
     "api_key": "<CodingPlan id.secret>",
-    "base_url": "https://zcode.z.ai/api/v1/ultra/anthropic",
+    "base_url": "<站点 ultra 端点>",
     "api_protocol": "anthropic",
     "account_mode": "coding",
-    "api_base_urls": { "anthropic": "https://zcode.z.ai/api/v1/ultra/anthropic" },
+    "api_base_urls": { "anthropic": "<站点 ultra 端点>" },
     "upstream_mode": "ultra",
     "zcode_site": "bigmodel|zai",
-    "zcode_jwt": "...", "zcode_device": "...", "zcode_user_id": "...",
+    "zcode_jwt": "...", "zcode_access_token": "...", "zcode_device": "...", "zcode_user_id": "...",
     "zcode_email": "...", "zcode_plan": "...", "zcode_org": "...", "zcode_project": "..."
   },
   "extra": { "anthropic_apikey_auth_scheme": "authorization_bearer" }
@@ -74,7 +75,10 @@
 | GET | `/api/v1/admin/zcode/oauth/sites` | 返回 `[{id,name,description}]`（zai / bigmodel） |
 | POST | `/api/v1/admin/zcode/oauth/auth-url` | 入参 `{site, proxy_id?}`；返回 `{auth_url,state,site,expires_at}` |
 | POST | `/api/v1/admin/zcode/oauth/poll` | 入参 `{state}`；返回 `{status: pending|ready|declined, email, name, user_id, plan, team, has_api_key, masked_api_key, warning, expires_at}` |
-| POST | `/api/v1/admin/zcode/oauth/accounts` | 入参 `{state, name?, api_key?, proxy_id?, concurrency?, priority?, group_ids?}` → 创建账号 |
+| POST | `/api/v1/admin/zcode/oauth/accounts` | 入参 `{state, name?, api_key?, proxy_id?, concurrency?, priority?, group_ids?, peak_pause?}` → 创建账号；同一 ZCode 用户重新登录时更新其凭据 |
+| GET | `/api/v1/admin/zcode/accounts/:id/reset-cards` | 查询重置卡；`?force=true` 绕过 10 分钟缓存 |
+| POST | `/api/v1/admin/zcode/accounts/:id/reset` | 入参 `{reset_type: FIVE_HOUR\|WEEK}`，消耗一张卡，返回最新库存 |
+| PUT | `/api/v1/admin/zcode/accounts/:id/settings` | 入参 `{peak_pause?, auto_claim?}` |
 
 `api_key` 留空则使用 OAuth 期间自动开通的 key；自动开通失败时 `poll` 返回 `warning`，
 弹窗提示手工粘贴 key。
@@ -103,8 +107,25 @@ kc1 上以 docker 起了一套隔离测试实例（`/home/colemak/sub3api-test`�
      `{"type":"test_complete","success":true}`，证明 base_url、Bearer 鉴权、协议转换全链路可用。
 4. 测试账号与实例为一次性验证，账号已删除（测试实例容器仍在 kc1，可按需 `docker compose down -v`）。
 
+## 重置卡与高峰暂停
+
+`ZCodeResetService` 每分钟巡检启用中的 ZCode 账号，协议和节奏对齐 ZCode Desktop：
+
+- 领卡：`POST /reset/opportunity`。发卡或限流后 10 分钟再试；`3301` 是日常的未达条件，按 `next_try_at` 且至少 5 分钟；网络错误、5xx、`2007` 复用幂等键 5 分钟后重试。账号 `extra.zcode_auto_claim=false` 时关闭，默认开启。
+- 库存：`GET /reset/status`，进程内缓存 10 分钟，发卡后立即刷新。
+- 临期：到期前 3 分钟内自动使用，避免白白过期。幂等键由账号、卡种和到期时间派生，重试不会多花一张。
+
+`extra.zcode_peak_pause=true` 时，账号在北京时间工作日 14:00–18:00 不参与调度，不含法定节假日调休。判断放在 `Account.IsSchedulable()`，不改 `schedulable` 字段，所以到点自动恢复；进行中的请求不中断，额度查询和巡检照常运行。
+
+机器人命令：`reset <账号> [5h|week]`、`peak <账号> on|off`，`quota` 图显示 Coding Plan 额度窗口和重置卡。
+
 ## 遗留 / 后续
 
+- JWT 和 access_token 的续期协议未知。上游拒绝后接口返回 `ZCODE_RELOGIN_REQUIRED`，重新走一次 OAuth 即可更新同一账号的凭据。本次之前创建的账号没有 `zcode_access_token`，也需要重新登录。
+- 重置卡协议取自 `new-api` 的实现和逆向报告，未用真实账号验证 opportunity 和 use。
+- 未做 pigapi 规范里的套餐到期探测和耗尽询问。
+- 没有模仿 ZCode Desktop 请求头（上游 #6596）：逆向报告的消融实验表明 ultra 端点不校验客户端指纹。
+- 巡检状态在进程内，多副本会重复领卡请求（幂等键不同，但上游按账号判定资格）。
 - relay（`zcode-plan` 中转，JWT 鉴权）与套餐切换未实现；`zcode_jwt`/`zcode_device` 已落盘，后续接入无需再改流程。
 - OAuth 会话存在进程内存（单实例可用）；多实例部署需换 Redis 共享。
 - 自动开通 key 走的是上游业务接口（`api_keys` + `copy`），若上游改版会失败，此时弹窗可手工填 key。

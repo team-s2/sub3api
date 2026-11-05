@@ -104,6 +104,11 @@
           </p>
         </div>
 
+        <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-200">
+          <input v-model="peakPause" type="checkbox" class="mt-0.5 rounded" />
+          <span>{{ t('admin.accounts.zcode.peakPause') }}</span>
+        </label>
+
         <div v-if="proxies?.length">
           <label class="input-label">{{ t('admin.accounts.zcode.proxy') }}</label>
           <select v-model="proxyId" class="input">
@@ -201,6 +206,7 @@ const errorMessage = ref('')
 
 const accountName = ref('')
 const concurrency = ref(1)
+const peakPause = ref(false)
 const apiKeyOverride = ref('')
 const proxyId = ref<number | null>(null)
 const selectedGroupIds = ref<number[]>([])
@@ -253,6 +259,7 @@ function reset() {
   creating.value = false
   accountName.value = ''
   concurrency.value = 1
+  peakPause.value = false
   apiKeyOverride.value = ''
   proxyId.value = null
   selectedGroupIds.value = []
@@ -328,6 +335,7 @@ async function createAccount() {
       api_key: apiKeyOverride.value.trim() || undefined,
       proxy_id: proxyId.value,
       concurrency: concurrency.value > 0 ? concurrency.value : 1,
+      peak_pause: peakPause.value,
       group_ids: selectedGroupIds.value.length ? selectedGroupIds.value : undefined
     })
     emit('created')

@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"strings"
+	"strconv"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -9,17 +9,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ZCodeOAuthHandler 暴露 ZCode（Z.ai / BigModel）OAuth 登录与账号开通接口。
+// ZCodeOAuthHandler 暴露 ZCode（Z.ai / BigModel）OAuth 登录、账号开通与重置卡接口。
 // 登录成功后自动复用/开通 CodingPlan 项目 key，账号固定走 ultra 端点。
 type ZCodeOAuthHandler struct {
 	zcodeOAuthService *service.ZCodeOAuthService
+	zcodeResetService *service.ZCodeResetService
 	adminService      service.AdminService
 }
 
 // NewZCodeOAuthHandler 构造 handler。
-func NewZCodeOAuthHandler(zcodeOAuthService *service.ZCodeOAuthService, adminService service.AdminService) *ZCodeOAuthHandler {
+func NewZCodeOAuthHandler(zcodeOAuthService *service.ZCodeOAuthService, zcodeResetService *service.ZCodeResetService, adminService service.AdminService) *ZCodeOAuthHandler {
 	return &ZCodeOAuthHandler{
 		zcodeOAuthService: zcodeOAuthService,
+		zcodeResetService: zcodeResetService,
 		adminService:      adminService,
 	}
 }
@@ -77,62 +79,110 @@ type ZCodeCreateAccountRequest struct {
 	Concurrency int     `json:"concurrency"`
 	Priority    int     `json:"priority"`
 	GroupIDs    []int64 `json:"group_ids"`
+	PeakPause   bool    `json:"peak_pause"`
 }
 
-// CreateAccount 用已完成的登录创建账号。
-// 未提供 api_key 时使用登录流程自动开通的 CodingPlan key。
+// CreateAccount 用已完成的登录创建账号；同一 ZCode 用户重新登录时更新其凭据。
 func (h *ZCodeOAuthHandler) CreateAccount(c *gin.Context) {
 	var req ZCodeCreateAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	credential, err := h.zcodeOAuthService.CredentialFor(req.State)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	credentials := h.zcodeOAuthService.BuildAccountCredentials(credential, req.APIKey)
-	if strings.TrimSpace(credentials["api_key"].(string)) == "" {
-		response.BadRequest(c, "CodingPlan API key is required: automatic provisioning failed, paste the key manually")
-		return
-	}
-
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		switch {
-		case credential.Email != "":
-			name = "ZCode " + credential.Email
-		case credential.Name != "":
-			name = "ZCode " + credential.Name
-		default:
-			name = "ZCode OAuth"
-		}
-	}
-
-	concurrency := req.Concurrency
-	if concurrency <= 0 {
-		concurrency = 1
-	}
-
-	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
-		Name:        name,
+	ctx := c.Request.Context()
+	draft, err := h.zcodeOAuthService.AccountDraft(ctx, req.State, service.ZCodeAccountOptions{
+		Name:        req.Name,
 		Notes:       req.Notes,
-		Platform:    service.PlatformZhipu,
-		Type:        service.AccountTypeAPIKey,
-		Credentials: credentials,
-		Extra: map[string]any{
-			// ultra 端点只认 Authorization: Bearer（实测 x-api-key 返回异常响应）。
-			"anthropic_apikey_auth_scheme": service.AnthropicAPIKeyAuthSchemeAuthorizationBearer,
-		},
+		APIKey:      req.APIKey,
 		ProxyID:     req.ProxyID,
-		Concurrency: concurrency,
+		Concurrency: req.Concurrency,
 		Priority:    req.Priority,
 		GroupIDs:    req.GroupIDs,
+		PeakPause:   req.PeakPause,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
+	var account *service.Account
+	if draft.ExistingID != 0 {
+		account, err = h.adminService.UpdateAccount(ctx, draft.ExistingID, &service.UpdateAccountInput{Credentials: draft.Input.Credentials})
+	} else {
+		account, err = h.adminService.CreateAccount(ctx, draft.Input)
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	h.zcodeOAuthService.Finish(req.State)
 	response.Success(c, dto.AccountFromService(account))
+}
+
+type ZCodeResetRequest struct {
+	ResetType string `json:"reset_type" binding:"required"`
+}
+
+// GetResetCards 返回账号可用的重置卡。force=true 时绕过缓存向上游查询。
+func (h *ZCodeOAuthHandler) GetResetCards(c *gin.Context) {
+	id, ok := zcodeAccountID(c)
+	if !ok {
+		return
+	}
+	inventory, err := h.zcodeResetService.Inventory(c.Request.Context(), id, c.Query("force") == "true")
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, inventory)
+}
+
+// UseResetCard 消耗一张重置卡，立即重置对应额度窗口。
+func (h *ZCodeOAuthHandler) UseResetCard(c *gin.Context) {
+	id, ok := zcodeAccountID(c)
+	if !ok {
+		return
+	}
+	var req ZCodeResetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	inventory, err := h.zcodeResetService.UseCard(c.Request.Context(), id, req.ResetType)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, inventory)
+}
+
+type ZCodeSettingsRequest struct {
+	PeakPause *bool `json:"peak_pause"`
+	AutoClaim *bool `json:"auto_claim"`
+}
+
+// UpdateSettings 设置高峰暂停与自动领卡开关，未提供的字段保持不变。
+func (h *ZCodeOAuthHandler) UpdateSettings(c *gin.Context) {
+	id, ok := zcodeAccountID(c)
+	if !ok {
+		return
+	}
+	var req ZCodeSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.zcodeResetService.UpdateSettings(c.Request.Context(), id, req.PeakPause, req.AutoClaim); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": id})
+}
+
+func zcodeAccountID(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return 0, false
+	}
+	return id, true
 }

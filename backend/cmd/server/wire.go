@@ -100,6 +100,7 @@ func provideCleanup(
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
 	cnProviderBalanceCheck *service.CNProviderBalanceCheckService,
+	zcodeReset *service.ZCodeResetService,
 	codexVersionSync *service.OpenAICodexVersionSyncService,
 	claudeCodeVersionSync *service.ClaudeCodeVersionSyncService,
 	proxyExpiry *service.ProxyExpiryService,
@@ -271,6 +272,12 @@ func provideCleanup(
 			}},
 			{"AccountExpiryService", func() error {
 				accountExpiry.Stop()
+				return nil
+			}},
+			{"ZCodeResetService", func() error {
+				if zcodeReset != nil {
+					zcodeReset.Stop()
+				}
 				return nil
 			}},
 			{"CNProviderBalanceCheckService", func() error {

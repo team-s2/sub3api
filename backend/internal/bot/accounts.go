@@ -15,10 +15,11 @@ import (
 const accountPageSize = 500
 
 const (
-	stateReady     = "ready"
-	stateDisabled  = "disabled"
-	stateExhausted = "quota_exhausted"
-	stateInvalid   = "invalid"
+	stateReady      = "ready"
+	stateDisabled   = "disabled"
+	statePeakPaused = "peak_paused"
+	stateExhausted  = "quota_exhausted"
+	stateInvalid    = "invalid"
 )
 
 func (a *App) accounts(ctx context.Context) ([]service.Account, error) {
@@ -95,6 +96,8 @@ func accountState(account *service.Account) string {
 		return stateInvalid
 	case !account.Schedulable:
 		return stateDisabled
+	case account.IsZCodePeakPaused(now):
+		return statePeakPaused
 	case account.RateLimitResetAt != nil && account.RateLimitResetAt.After(now):
 		return stateExhausted
 	}

@@ -20,6 +20,7 @@ export default {
         endpoint: '上游端点',
         accountName: '账号名称',
         concurrency: '并发数',
+        peakPause: '高峰时段暂停调度（北京时间工作日 14:00–18:00，此时额度按全价扣减）',
         apiKey: 'CodingPlan API Key',
         apiKeyPlaceholder: '留空则使用自动开通的 Key',
         apiKeyAutoHint: '已自动开通/复用项目 Key，留空即使用该 Key。',
