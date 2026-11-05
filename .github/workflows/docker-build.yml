@@ -33,7 +33,7 @@ jobs:
         run: |
           base_version=$(tr -d '\r\n' < backend/cmd/server/VERSION)
           test -n "$base_version"
-          short_sha=$(git rev-parse --short=12 HEAD)
+          short_sha=${GITHUB_SHA::7}
           {
             echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
             echo "sha=$short_sha"
@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          short_sha=$(git rev-parse --short=12 HEAD)
+          short_sha=${GITHUB_SHA::7}
           base_version=$(tr -d '\r\n' < backend/cmd/server/VERSION)
           version="${base_version}-s2.${short_sha}"
           docker buildx imagetools create \
