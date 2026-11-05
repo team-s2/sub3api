@@ -1,0 +1,169 @@
+<template>
+  <div
+    class="group relative flex cursor-pointer flex-col gap-2.5 rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-primary-300 hover:shadow-sm dark:border-dark-600 dark:bg-dark-800 dark:hover:border-primary-700"
+    :class="[
+      selected
+        ? 'border-primary-400 bg-primary-50/60 dark:border-primary-600 dark:bg-primary-900/20'
+        : '',
+      account.schedulable ? '' : 'opacity-70'
+    ]"
+    data-testid="account-card"
+    @click="emit('edit', account)"
+  >
+    <!-- 第一行：勾选 + 平台/类型徽标 + 状态 + 更多操作 -->
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <input
+          type="checkbox"
+          class="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          :checked="selected"
+          :aria-label="account.name"
+          @click.stop
+          @change="emit('toggle-select', account.id)"
+        />
+        <div class="min-w-0 overflow-hidden">
+          <PlatformTypeBadge
+            :platform="account.platform"
+            :type="account.type"
+            :auth-mode="authMode ?? undefined"
+            :plan-type="planType ?? undefined"
+            :privacy-mode="(account.extra?.privacy_mode as string | undefined) ?? account.parent_privacy_mode ?? undefined"
+            :subscription-expires-at="(account.credentials?.subscription_expires_at as string | undefined) ?? account.parent_subscription_expires_at ?? undefined"
+          />
+        </div>
+      </div>
+      <div class="flex shrink-0 items-center gap-1">
+        <AccountStatusIndicator :account="account as Account" @show-temp-unsched="(a) => emit('show-temp-unsched', a)" />
+        <button
+          type="button"
+          class="-mr-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-200"
+          :title="t('common.more')"
+          data-testid="account-card-menu"
+          @click.stop="emit('menu', account, $event)"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 第二行：名称 + ID + 邮箱 -->
+    <div class="min-w-0">
+      <div class="flex min-w-0 items-baseline gap-1.5">
+        <span class="shrink-0 font-mono text-[11px] text-gray-400 dark:text-dark-400">#{{ account.id }}</span>
+        <span class="truncate text-sm font-semibold text-gray-900 dark:text-white" :title="account.name">
+          {{ account.name }}
+        </span>
+      </div>
+      <div
+        v-if="email"
+        class="truncate text-xs text-gray-500 dark:text-dark-400"
+        :title="email"
+      >
+        {{ email }}
+      </div>
+      <div v-else-if="account.notes" class="truncate text-xs text-gray-400 dark:text-dark-400" :title="account.notes">
+        {{ account.notes }}
+      </div>
+    </div>
+
+    <!-- 第三行：用量窗口（5h/7d 等） -->
+    <div class="min-w-0 overflow-hidden" @click.stop>
+      <AccountUsageCell
+        :account="account as Account"
+        :today-stats="usage.todayStats ?? null"
+        :today-stats-loading="usage.todayStatsLoading === true"
+        :manual-refresh-token="usage.manualRefreshToken ?? 0"
+        :batched-usage="usage.batchedUsage ?? null"
+        :batched-usage-error="usage.batchedUsageError ?? null"
+        :batched-usage-loading="usage.batchedUsageLoading === true"
+        :request-batched-usage="usage.requestBatchedUsage ?? null"
+        @account-updated="(a) => emit('account-updated', a)"
+        @usage-loaded="(u) => emit('usage-loaded', account.id, u)"
+      />
+    </div>
+
+    <!-- 第四行：分组 + 调度开关 + 详情 -->
+    <div class="mt-auto flex items-center justify-between gap-2 border-t border-gray-100 pt-2 dark:border-dark-700">
+      <div class="min-w-0 flex-1 overflow-hidden">
+        <AccountGroupsCell :groups="groups" :max-display="2" />
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <span class="hidden text-[11px] text-gray-400 sm:inline">{{
+          account.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')
+        }}</span>
+        <button
+          type="button"
+          :disabled="togglingSchedulable"
+          class="relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+          :class="[
+            account.schedulable
+              ? 'bg-primary-500 hover:bg-primary-600'
+              : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500'
+          ]"
+          :title="account.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')"
+          @click.stop="emit('toggle-schedulable', account)"
+        >
+          <span
+            class="pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200"
+            :class="account.schedulable ? 'translate-x-4' : 'translate-x-0'"
+          />
+        </button>
+        <span class="text-[11px] font-medium text-primary-600 dark:text-primary-400">{{ t('admin.accounts.card.details') }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+import type { Account, AccountListItem, AccountUsageInfo, AdminGroup, WindowStats } from '@/types'
+import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
+import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
+import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
+import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
+
+interface UsageBinding {
+  todayStats?: WindowStats | null
+  todayStatsLoading?: boolean
+  manualRefreshToken?: number
+  batchedUsage?: AccountUsageInfo | null
+  batchedUsageError?: string | null
+  batchedUsageLoading?: boolean
+  requestBatchedUsage?: ((account: Account, options?: { force?: boolean }) => void) | null
+}
+
+withDefaults(
+  defineProps<{
+    account: AccountListItem
+    groups: AdminGroup[]
+    selected?: boolean
+    email?: string | null
+    authMode?: string | null
+    planType?: string | null
+    usage?: UsageBinding
+    togglingSchedulable?: boolean
+  }>(),
+  {
+    selected: false,
+    email: null,
+    authMode: null,
+    planType: null,
+    usage: () => ({}),
+    togglingSchedulable: false
+  }
+)
+
+const emit = defineEmits<{
+  (e: 'edit', account: AccountListItem): void
+  (e: 'menu', account: AccountListItem, event: MouseEvent): void
+  (e: 'toggle-select', id: number): void
+  (e: 'toggle-schedulable', account: AccountListItem): void
+  (e: 'show-temp-unsched', account: Account): void
+  (e: 'account-updated', account: Account): void
+  (e: 'usage-loaded', id: number, usage: AccountUsageInfo): void
+}>()
+
+const { t } = useI18n()
+</script>

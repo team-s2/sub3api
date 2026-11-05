@@ -58,6 +58,11 @@ vi.mock('@/stores/auth', () => ({
   })
 }))
 
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {}, path: '/admin/channels', params: {} }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() })
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -107,9 +112,10 @@ const mountView = () => mount(AccountsView, {
       TablePageLayout: {
         template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
       },
-      DataTable: {
-        props: ['data'],
-        template: '<div data-test="data-table"><div v-for="row in data" :key="row.id"><slot name="cell-select" :row="row" /></div></div>'
+      AccountCard: {
+        props: ['account', 'selected'],
+        emits: ['toggle-select', 'edit', 'menu'],
+        template: '<div data-test="data-table"><label data-test="select-row"><input type="checkbox" :checked="selected" @change="$emit(\'toggle-select\', account.id)" /></label></div>'
       },
       Pagination: true,
       ConfirmDialog: true,

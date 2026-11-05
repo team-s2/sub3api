@@ -56,21 +56,28 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ token: 'test-token', isSimpleMode: false })
 }))
 
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {}, path: '/admin/channels', params: {} }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() })
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return { ...actual, useI18n: () => ({ t: (key: string) => key }) }
 })
 
-const DataTableStub = defineComponent({
-  props: { data: { type: Array, default: () => [] } },
-  template: `
-    <div>
-      <div v-for="row in data" :key="row.id" :data-account-name="row.name">
-        <slot name="cell-groups" :row="row" />
-        <slot name="cell-actions" :row="row" />
-      </div>
-    </div>
-  `
+const AccountCardStub = defineComponent({
+  props: {
+    account: { type: Object, required: true },
+    groups: { type: Array, default: () => [] },
+    selected: Boolean
+  },
+  emits: ['edit', 'menu', 'toggle-select'],
+  template: `<div :data-account-name="account.name" data-testid="account-card">
+    <span data-test="account-groups">{{ groups.map(group => group.name).join(',') }}</span>
+    <button @click="$emit('edit', account)">common.edit</button>
+    <button @click="$emit('menu', account, $event)">common.more</button>
+  </div>`
 })
 
 const AccountGroupsCellStub = defineComponent({
@@ -100,7 +107,7 @@ function mountView(stubActionMenu = true) {
       stubs: {
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
-        DataTable: DataTableStub,
+        AccountCard: AccountCardStub,
         AccountTableActions: { template: '<div><slot name="after" /></div>' },
         AccountTableFilters: true,
         AccountBulkActionsBar: true,
@@ -212,7 +219,7 @@ describe('admin AccountsView lite account list', () => {
     await flushPromises()
     expect(wrapper.findComponent(AccountActionMenu).props('show')).toBe(true)
 
-    wrapper.getComponent(DataTableStub).element.dispatchEvent(new Event('scroll'))
+    wrapper.get('[data-testid="account-card-scroller"]').element.dispatchEvent(new Event('scroll'))
     await flushPromises()
     expect(wrapper.findComponent(AccountActionMenu).props('show')).toBe(false)
     wrapper.unmount()

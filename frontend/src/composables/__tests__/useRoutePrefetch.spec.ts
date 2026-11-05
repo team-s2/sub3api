@@ -25,11 +25,9 @@ const createMockRouter = (): Router => {
 
   const routes: Partial<RouteRecordNormalized>[] = [
     { path: '/admin/dashboard', components: { default: mockImportFn } },
-    { path: '/admin/accounts', components: { default: mockImportFn } },
+    { path: '/admin/channels', components: { default: mockImportFn } },
     { path: '/admin/users', components: { default: mockImportFn } },
     { path: '/admin/groups', components: { default: mockImportFn } },
-    { path: '/admin/subscriptions', components: { default: mockImportFn } },
-    { path: '/admin/redeem', components: { default: mockImportFn } },
     { path: '/dashboard', components: { default: mockImportFn } },
     { path: '/keys', components: { default: mockImportFn } },
     { path: '/usage', components: { default: mockImportFn } },

@@ -3,6 +3,14 @@ export default {
       title: '账号管理',
       description: '管理 AI 平台账号和 Cookie',
       createAccount: '添加账号',
+      card: {
+        sortBy: '排序',
+        details: '详情',
+        viewCards: '卡片视图',
+        viewTable: '表格视图',
+        empty: '暂无渠道，点击右上角「添加账号」创建第一个渠道',
+        loading: '加载中…',
+      },
       zcode: {
         menuEntry: 'ZCode OAuth 登录',
         authMethod: '渠道认证方式',

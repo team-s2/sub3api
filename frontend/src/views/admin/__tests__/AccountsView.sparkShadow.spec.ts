@@ -5,7 +5,6 @@ import AccountsView from '../AccountsView.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import HelpTooltip from '@/components/common/HelpTooltip.vue'
 
 // 外审 F2:AccountActionMenu emit 'create-spark-shadow',但 AccountsView 此前未监听,
 // 导致按钮点击无效。本测试通过真实组件引用 emit 该事件,断言父页面接线调用 API。
@@ -56,6 +55,11 @@ vi.mock('@/stores/app', () => ({
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ token: 'test-token' })
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {}, path: '/admin/channels', params: {} }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() })
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -307,46 +311,6 @@ describe('admin AccountsView — 账号行展示', () => {
     wrapper.unmount()
   })
 
-  it('仅将具有安全 base_url 的 API Key 账号名称链接到站点主页', async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        { id: 101, name: 'relay-account', platform: 'openai', type: 'apikey', credentials: { base_url: 'https://relay.example.com/api/v1/' } },
-        { id: 102, name: 'oauth-account', platform: 'openai', type: 'oauth', credentials: { base_url: 'https://oauth.example.com/v1' } },
-        { id: 103, name: 'invalid-url', platform: 'openai', type: 'apikey', credentials: { base_url: 'javascript:alert(1)' } },
-      ],
-      total: 3,
-      page: 1,
-      page_size: 20,
-      pages: 1,
-    })
-
-    const wrapper = mountViewWithRow()
-    await flushPromises()
-
-    const links = wrapper.findAll('a')
-    expect(links).toHaveLength(1)
-    const [link] = links
-    expect(link.text()).toBe('relay-account')
-    expect(link.attributes()).toMatchObject({
-      href: 'https://relay.example.com',
-      target: '_blank',
-      rel: 'noopener noreferrer',
-    })
-    expect(link.classes()).toEqual(expect.arrayContaining([
-      'border-dotted',
-      'text-gray-900',
-      'dark:text-white',
-    ]))
-    expect(link.classes()).not.toContain('text-primary-600')
-    const tooltip = wrapper.findComponent(HelpTooltip)
-    expect(tooltip.props('content')).toBe('https://relay.example.com')
-    expect(tooltip.props('widthClass')).toBe('w-max max-w-sm break-all')
-    expect(tooltip.classes()).toEqual(expect.arrayContaining(['self-start']))
-    expect(wrapper.text()).toContain('oauth-account')
-    expect(wrapper.text()).toContain('invalid-url')
-
-    wrapper.unmount()
-  })
 
   it('prefers persisted Grok JWT tier over lagging billing/quota snapshots', async () => {
     const grokAccounts = [

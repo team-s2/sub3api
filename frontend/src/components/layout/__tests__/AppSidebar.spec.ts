@@ -70,7 +70,10 @@ describe('AppSidebar subscription feature flag', () => {
   })
 
   it('also hides the admin Subscription Management entry on recharge-only sites', () => {
-    expect(componentSource).toMatch(/path: '\/admin\/subscriptions'[^\n]*featureFlag: flagSubscription/)
+    // 订阅、监控、定价已合并进渠道管理单页，侧栏不再有独立入口
+    expect(componentSource).not.toContain("path: '/admin/subscriptions'")
+    expect(componentSource).not.toContain("path: '/admin/channels/monitor'")
+    expect(componentSource).not.toContain("path: '/admin/channels/pricing'")
   })
 
   it('derives the purchase entry label from the site billing mode', () => {

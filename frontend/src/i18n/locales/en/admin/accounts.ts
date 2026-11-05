@@ -3,6 +3,14 @@ export default {
       title: 'Account Management',
       description: 'Manage AI platform accounts and credentials',
       createAccount: 'Create Account',
+      card: {
+        sortBy: 'Sort by',
+        details: 'Details',
+        viewCards: 'Card view',
+        viewTable: 'Table view',
+        empty: 'No channels yet. Use "Create Account" to add your first channel.',
+        loading: 'Loading…',
+      },
       zcode: {
         menuEntry: 'ZCode OAuth Sign-in',
         authMethod: 'Channel credential',
