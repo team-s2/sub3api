@@ -1,0 +1,104 @@
+name: Publish Docker image to GHCR
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ghcr-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} image
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - name: Resolve image metadata
+        id: metadata
+        shell: bash
+        run: |
+          base_version=$(tr -d '\r\n' < backend/cmd/server/VERSION)
+          test -n "$base_version"
+          short_sha=$(git rev-parse --short=12 HEAD)
+          {
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "sha=$short_sha"
+            echo "version=${base_version}-s2.${short_sha}"
+            echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ${{ steps.metadata.outputs.image }}:${{ steps.metadata.outputs.sha }}-${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ steps.metadata.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.metadata.outputs.date }}
+            GOPROXY=https://proxy.golang.org,direct
+            GOSUMDB=sum.golang.org
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+          cache-from: type=gha,scope=sub3api-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=sub3api-${{ matrix.arch }}
+          provenance: mode=max
+          sbom: true
+
+  manifest:
+    name: Publish multi-platform manifest
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tags and digest
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          short_sha=$(git rev-parse --short=12 HEAD)
+          base_version=$(tr -d '\r\n' < backend/cmd/server/VERSION)
+          version="${base_version}-s2.${short_sha}"
+          docker buildx imagetools create \
+            --tag "$image:$short_sha" \
+            --tag "$image:$version" \
+            --tag "$image:latest" \
+            "$image:$short_sha-amd64" \
+            "$image:$short_sha-arm64"
+          digest=$(docker buildx imagetools inspect "$image:$short_sha" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          {
+            echo "Published $image:$version"
+            echo
+            echo "Deployment image: $image:$short_sha@$digest"
+            echo
+            echo "Source: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
