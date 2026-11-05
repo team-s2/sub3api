@@ -90,6 +90,15 @@
         <AccountGroupsCell :groups="groups" :max-display="2" />
       </div>
       <div class="flex shrink-0 items-center gap-2">
+        <button
+          v-if="isZCode"
+          type="button"
+          class="rounded-md border border-primary-200 px-1.5 py-0.5 text-[11px] font-medium text-primary-600 transition-colors hover:bg-primary-50 dark:border-primary-800 dark:text-primary-300 dark:hover:bg-primary-900/30"
+          data-testid="account-card-reset-cards"
+          @click.stop="emit('quota', account as Account)"
+        >
+          {{ t('admin.accounts.zcode.quota.button') }}
+        </button>
         <span class="hidden text-[11px] text-gray-400 sm:inline">{{
           account.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')
         }}</span>
@@ -117,6 +126,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Account, AccountListItem, AccountUsageInfo, AdminGroup, WindowStats } from '@/types'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
@@ -134,7 +144,7 @@ interface UsageBinding {
   requestBatchedUsage?: ((account: Account, options?: { force?: boolean }) => void) | null
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     account: AccountListItem
     groups: AdminGroup[]
@@ -163,7 +173,13 @@ const emit = defineEmits<{
   (e: 'show-temp-unsched', account: Account): void
   (e: 'account-updated', account: Account): void
   (e: 'usage-loaded', id: number, usage: AccountUsageInfo): void
+  (e: 'quota', account: Account): void
 }>()
 
 const { t } = useI18n()
+
+// ZCode 账号（走 ultra 端点）才提供重置卡入口。
+const isZCode = computed(
+  () => props.account.platform === 'zhipu' && Boolean(props.account.credentials?.zcode_user_id)
+)
 </script>

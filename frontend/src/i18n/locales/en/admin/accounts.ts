@@ -2,7 +2,7 @@ export default {
     accounts: {
       title: 'Account Management',
       description: 'Manage AI platform accounts and credentials',
-      createAccount: 'Create Account',
+      createAccount: 'Add Channel',
       card: {
         sortBy: 'Sort by',
         details: 'Details',
@@ -12,6 +12,17 @@ export default {
         loading: 'Loading…',
       },
       zcode: {
+        quota: {
+          button: 'Quota',
+          title: 'ZCode quota details',
+          fiveHour: '5-hour window',
+          fiveHourDesc: 'Usage in the current 5-hour rolling window',
+          weekly: 'Weekly window',
+          weeklyDesc: 'Usage in the current weekly window',
+          used: 'Used quota',
+          noData: 'No quota data',
+          resetsAt: 'Resets at {time}',
+        },
         menuEntry: 'ZCode OAuth Sign-in',
         authMethod: 'Channel credential',
         authMethodApiKey: 'API Key',
@@ -20,6 +31,10 @@ export default {
           'Signing in through ZCode OAuth reuses or provisions the CodingPlan key automatically; the account always routes to the ultra endpoint (official 1.5x quota) and is billed at its normal rate multiplier.',
         oauthNotReady: 'Complete the ZCode authorization first',
         resetCards: {
+          cardsTitle: 'Reset cards',
+          cardsHint: 'Consume a card to reset the matching quota window immediately',
+          availableCount: '{count} available · earliest expires {time}',
+          cardList: 'Show all cards',
           menuEntry: 'Reset cards',
           title: 'ZCode reset cards',
           observedAt: 'Inventory at {time}',

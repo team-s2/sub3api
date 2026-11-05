@@ -1551,7 +1551,8 @@
       </div>
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
-      <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
+      <!-- ZCode OAuth 建号不填 API Key/端点：后端固定落 ultra 端点。 -->
+      <div v-if="form.type === 'apikey' && form.platform !== 'antigravity' && !isZhipuOAuthMode" class="space-y-4">
         <div v-if="!isMultiProtocolPlatform || apiProtocol !== 'adaptive'">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input

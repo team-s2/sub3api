@@ -139,21 +139,8 @@
                 </Teleport>
               </div>
             </template>
-            <!-- 订阅套餐 / 渠道监控 / 渠道定价：合并到本页，以抽屉展示 -->
-            <template #beforeCreate>
-              <button type="button" class="btn btn-secondary" @click="openPanel('subscriptions')">
-                <Icon name="creditCard" size="sm" class="mr-1.5" />
-                {{ t('nav.subscriptions') }}
-              </button>
-              <button type="button" class="btn btn-secondary" @click="openPanel('monitor')">
-                <Icon name="chartBar" size="sm" class="mr-1.5" />
-                {{ t('nav.channelMonitor') }}
-              </button>
-              <button type="button" class="btn btn-secondary" @click="openPanel('pricing')">
-                <Icon name="dollar" size="sm" class="mr-1.5" />
-                {{ t('nav.channelPricing') }}
-              </button>
-            </template>
+            <!-- 订阅套餐 / 渠道监控 / 渠道定价：已并入本页抽屉（保留旧链接的 ?panel= 直达）。 -->
+            <template #beforeCreate />
           </AccountTableActions>
         </div>
         <div
@@ -187,7 +174,7 @@
           @toggle-schedulable="handleBulkToggleSchedulable"
         />
         <div ref="accountTableRef" data-testid="account-card-scroller" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div class="mb-3 flex items-center justify-between gap-2">
+          <div class="mb-3 flex items-center justify-between gap-2 px-4">
             <span class="text-xs text-gray-500 dark:text-dark-400">
               {{ t('admin.accounts.selectedCount', { count: accounts.length }) }}
             </span>
@@ -205,7 +192,7 @@
               </select>
             </label>
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto pb-2">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
             <div
               v-if="loading && accounts.length === 0"
               class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
@@ -241,6 +228,7 @@
                 @show-temp-unsched="handleShowTempUnsched"
                 @account-updated="handleAccountUpdated"
                 @usage-loaded="handleAccountUsageLoaded"
+                @quota="openZCodeResetCards"
               />
             </div>
           </div>
@@ -249,7 +237,7 @@
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
-    <ZCodeResetCardsDialog :show="showZCodeResetCards" :account="resetCardsAccount" @close="showZCodeResetCards = false" />
+    <ZCodeQuotaDialog :show="showZCodeResetCards" :account="resetCardsAccount" @close="showZCodeResetCards = false" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
@@ -336,7 +324,7 @@ import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrs
 import ChannelMonitorView from '@/views/admin/ChannelMonitorView.vue'
 import ChannelsView from '@/views/admin/ChannelsView.vue'
 import SubscriptionCards from '@/components/admin/subscription/SubscriptionCards.vue'
-import ZCodeResetCardsDialog from '@/components/account/ZCodeResetCardsDialog.vue'
+import ZCodeQuotaDialog from '@/components/account/ZCodeQuotaDialog.vue'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountCard from '@/components/admin/account/AccountCard.vue'
