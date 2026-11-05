@@ -25,6 +25,7 @@
           <PlatformTypeBadge
             :platform="account.platform"
             :type="account.type"
+            :zcode-oauth="isZCode"
             :auth-mode="authMode ?? undefined"
             :plan-type="planType ?? undefined"
             :privacy-mode="(account.extra?.privacy_mode as string | undefined) ?? account.parent_privacy_mode ?? undefined"
@@ -34,6 +35,17 @@
       </div>
       <div class="flex shrink-0 items-center gap-1">
         <AccountStatusIndicator :account="account as Account" @show-temp-unsched="(a) => emit('show-temp-unsched', a)" />
+        <button
+          type="button"
+          class="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          :title="t('common.delete')"
+          data-testid="account-card-delete"
+          @click.stop="emit('delete', account)"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+          </svg>
+        </button>
         <button
           type="button"
           class="-mr-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-200"
@@ -66,22 +78,6 @@
       <div v-else-if="account.notes" class="truncate text-xs text-gray-400 dark:text-dark-400" :title="account.notes">
         {{ account.notes }}
       </div>
-    </div>
-
-    <!-- 第三行：用量窗口（5h/7d 等） -->
-    <div class="min-w-0 overflow-hidden" @click.stop>
-      <AccountUsageCell
-        :account="account as Account"
-        :today-stats="usage.todayStats ?? null"
-        :today-stats-loading="usage.todayStatsLoading === true"
-        :manual-refresh-token="usage.manualRefreshToken ?? 0"
-        :batched-usage="usage.batchedUsage ?? null"
-        :batched-usage-error="usage.batchedUsageError ?? null"
-        :batched-usage-loading="usage.batchedUsageLoading === true"
-        :request-batched-usage="usage.requestBatchedUsage ?? null"
-        @account-updated="(a) => emit('account-updated', a)"
-        @usage-loaded="(u) => emit('usage-loaded', account.id, u)"
-      />
     </div>
 
     <!-- 第四行：分组 + 调度开关 + 详情 -->
@@ -128,21 +124,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Account, AccountListItem, AccountUsageInfo, AdminGroup, WindowStats } from '@/types'
+import type { Account, AccountListItem, AdminGroup } from '@/types'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
-import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
-
-interface UsageBinding {
-  todayStats?: WindowStats | null
-  todayStatsLoading?: boolean
-  manualRefreshToken?: number
-  batchedUsage?: AccountUsageInfo | null
-  batchedUsageError?: string | null
-  batchedUsageLoading?: boolean
-  requestBatchedUsage?: ((account: Account, options?: { force?: boolean }) => void) | null
-}
 
 const props = withDefaults(
   defineProps<{
@@ -152,7 +137,6 @@ const props = withDefaults(
     email?: string | null
     authMode?: string | null
     planType?: string | null
-    usage?: UsageBinding
     togglingSchedulable?: boolean
   }>(),
   {
@@ -160,7 +144,6 @@ const props = withDefaults(
     email: null,
     authMode: null,
     planType: null,
-    usage: () => ({}),
     togglingSchedulable: false
   }
 )
@@ -171,9 +154,8 @@ const emit = defineEmits<{
   (e: 'toggle-select', id: number): void
   (e: 'toggle-schedulable', account: AccountListItem): void
   (e: 'show-temp-unsched', account: Account): void
-  (e: 'account-updated', account: Account): void
-  (e: 'usage-loaded', id: number, usage: AccountUsageInfo): void
   (e: 'quota', account: Account): void
+  (e: 'delete', account: AccountListItem): void
 }>()
 
 const { t } = useI18n()

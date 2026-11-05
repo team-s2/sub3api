@@ -9,7 +9,7 @@
       <span :class="['inline-flex items-center gap-1 px-1.5 py-1', typeClass]">
         <!-- OAuth icon -->
         <svg
-          v-if="type === 'oauth'"
+          v-if="effectiveType === 'oauth'"
           class="h-3 w-3"
           fill="none"
           viewBox="0 0 24 24"
@@ -23,9 +23,9 @@
           />
         </svg>
         <!-- Setup Token icon -->
-        <Icon v-else-if="type === 'setup-token'" name="shield" size="xs" />
+        <Icon v-else-if="effectiveType === 'setup-token'" name="shield" size="xs" />
         <!-- API Key icon -->
-        <Icon v-else-if="type === 'service_account'" name="cloud" size="xs" />
+        <Icon v-else-if="effectiveType === 'service_account'" name="cloud" size="xs" />
         <Icon v-else name="key" size="xs" />
         <span>{{ typeLabel }}</span>
       </span>
@@ -83,11 +83,16 @@ interface Props {
   planType?: string
   privacyMode?: string
   subscriptionExpiresAt?: string
+  /** ZCode OAuth 建的号虽然 type 是 apikey，但认证方式是 OAuth 登录。 */
+  zcodeOAuth?: boolean
 }
 
 const props = defineProps<Props>()
 
 const platformLabel = computed(() => sharedPlatformLabel(props.platform))
+
+// ZCode OAuth 账号以 apikey 形态落库，但展示上应按 OAuth 处理。
+const effectiveType = computed(() => (props.zcodeOAuth ? 'oauth' : props.type))
 
 const normalizedAuthMode = computed(() =>
   (props.authMode || '').trim().toLowerCase().replace(/[\s_-]+/g, '')
@@ -98,7 +103,7 @@ const typeLabel = computed(() => {
     if (normalizedAuthMode.value === 'agentidentity') return 'Agent Identity'
     if (normalizedAuthMode.value === 'personalaccesstoken') return 'PAT'
   }
-  switch (props.type) {
+  switch (effectiveType.value) {
     case 'oauth':
       return 'OAuth'
     case 'setup-token':
@@ -110,7 +115,7 @@ const typeLabel = computed(() => {
     case 'service_account':
       return 'Agent Platform (Vertex)'
     default:
-      return props.type
+      return effectiveType.value
   }
 })
 

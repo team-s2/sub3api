@@ -3740,10 +3740,10 @@ watch(editApiProtocol, (protocol, previousProtocol) => {
   }
   if (previousProtocol === 'adaptive') {
     editBaseUrl.value = editAdaptiveBaseUrls.value[protocol] ||
-      defaultCNBaseUrl(props.account!.platform, currentOpenCodeOrCNMode(), protocol)
+      resolveDefaultBaseUrl(props.account!.platform, currentOpenCodeOrCNMode(), protocol)
     return
   }
-  editBaseUrl.value = defaultCNBaseUrl(props.account!.platform, currentOpenCodeOrCNMode(), protocol)
+  editBaseUrl.value = resolveDefaultBaseUrl(props.account!.platform, currentOpenCodeOrCNMode(), protocol)
 })
 watch(editAccountMode, (mode, previousMode) => {
   if (!isCNApiKeyAccount.value || syncingForm.value) return
@@ -3773,7 +3773,7 @@ watch(editAccountMode, (mode, previousMode) => {
     editBaseUrl.value = editAdaptiveBaseUrls.value.chat_completions
     return
   }
-  editBaseUrl.value = defaultCNBaseUrl(props.account!.platform, mode, editApiProtocol.value)
+  editBaseUrl.value = resolveDefaultBaseUrl(props.account!.platform, mode, editApiProtocol.value)
 })
 watch(editOpenCodeAccountMode, (mode, previousMode) => {
   if (!isCNApiKeyAccount.value || props.account?.platform !== 'opencode_go' || syncingForm.value) return
@@ -4464,6 +4464,25 @@ const tempUnschedPresets = computed(() => [
   }
 ])
 
+// ZCode OAuth 账号：base_url 固定走 ultra 端点，切换协议/账号类型时不应被重置成官方通用端点。
+const zcodeCredentials = computed(() => (props.account?.credentials ?? {}) as Record<string, unknown>)
+const isZCodeOAuthAccount = computed(() => {
+  if (props.account?.platform !== 'zhipu') return false
+  const creds = zcodeCredentials.value
+  const userId = creds.zcode_user_id
+  return (typeof userId === 'string' && userId !== '') || creds.upstream_mode === 'ultra'
+})
+const zcodeUltraBaseUrl = computed(() =>
+  zcodeCredentials.value.zcode_site === 'bigmodel'
+    ? 'https://zcode.z.ai/api/v1/ultra/anthropic'
+    : 'https://zcode.z.ai/api/v1/ultra-zai/anthropic'
+)
+/** ZCode 账号的 anthropic 协议端点就是 ultra；其余情况沿用平台预设。 */
+const resolveDefaultBaseUrl = (platform: string, mode: string, protocol: CnApiProtocol): string => {
+  if (isZCodeOAuthAccount.value && protocol === 'anthropic') return zcodeUltraBaseUrl.value
+  return defaultCNBaseUrl(platform, mode, protocol)
+}
+
 // Computed: default base URL based on platform
 const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
@@ -4473,9 +4492,9 @@ const defaultBaseUrl = computed(() => {
   // CN 供应商：按当前模式/协议回落到官方预设（清空输入框提交时使用），
   // 不能落到 anthropic 默认值（会被当 CC base 拼出错误端点）。
   if (props.account && isMultiProtocolApiKeyPlatform(props.account.platform)) {
-    return defaultCNBaseUrl(props.account.platform, currentOpenCodeOrCNMode(), editApiProtocol.value)
+    return resolveDefaultBaseUrl(props.account.platform, currentOpenCodeOrCNMode(), editApiProtocol.value)
   }
-  return 'https://api.anthropic.com'
+  return isZCodeOAuthAccount.value ? zcodeUltraBaseUrl.value : 'https://api.anthropic.com'
 })
 
 const mixedChannelWarningMessageText = computed(() => {
@@ -4922,8 +4941,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
             : newAccount.platform === 'typesafe'
               ? 'https://api.typesafe.ai'
             : isMultiProtocolApiKeyPlatform(newAccount.platform)
-              ? defaultCNBaseUrl(newAccount.platform, currentOpenCodeOrCNMode(), editApiProtocol.value)
-              : 'https://api.anthropic.com'
+              ? resolveDefaultBaseUrl(newAccount.platform, currentOpenCodeOrCNMode(), editApiProtocol.value)
+              : (isZCodeOAuthAccount.value ? zcodeUltraBaseUrl.value : 'https://api.anthropic.com')
     editBaseUrl.value = isCNApiKeyAccount.value && editApiProtocol.value === 'adaptive'
       ? editAdaptiveBaseUrls.value.chat_completions
       : (credentials.base_url as string) || platformDefaultUrl

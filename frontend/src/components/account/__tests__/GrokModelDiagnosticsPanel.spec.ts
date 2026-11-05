@@ -27,7 +27,7 @@ vi.mock('vue-i18n', async () => {
 
 import GrokModelDiagnosticsPanel from '../GrokModelDiagnosticsPanel.vue'
 
-const NOT_LISTED_ZH = '未在该账号此端点的当前目录中发现'
+const NOT_LISTED_ZH = '未在该渠道此端点的当前目录中发现'
 const SAVED_CONFIG_ZH = '诊断基于已保存配置，请保存后重新同步'
 const REQUESTS_NOT_BLOCKED_ZH = '请求不会被阻断'
 const REQUIRED_KEYS = [

@@ -6,7 +6,7 @@
         <div class="min-w-0">
           <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ account?.name || '-' }}</p>
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.accounts.zcode.resetCards.observedAt', { time: observedAtText }) }}
+            {{ t('admin.accounts.zcode.quota.usageUpdatedAt', { time: usageUpdatedAtText }) }}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-4">
@@ -18,19 +18,19 @@
             <input v-model="peakPause" type="checkbox" class="rounded" @change="saveSettings" />
             {{ t('admin.accounts.zcode.resetCards.peakPause') }}
           </label>
-          <button type="button" class="btn btn-secondary text-xs" :disabled="loading || usageLoading" @click="reload">
-            <Icon name="refresh" size="sm" :class="['mr-1', loading || usageLoading ? 'animate-spin' : '']" />
+          <button type="button" class="btn btn-secondary text-xs" :disabled="loading" @click="reload">
+            <Icon name="refresh" size="sm" :class="['mr-1', loading ? 'animate-spin' : '']" />
             {{ t('common.refresh') }}
           </button>
         </div>
       </div>
 
-      <!-- 额度窗口 -->
+      <!-- 两个额度窗口，各自带上对应的重置卡 -->
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div
           v-for="window in quotaWindows"
           :key="window.key"
-          class="rounded-xl border border-gray-200 p-4 dark:border-dark-600"
+          class="flex flex-col rounded-xl border border-gray-200 p-4 dark:border-dark-600"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
@@ -41,64 +41,32 @@
               {{ window.percentLabel }}
             </span>
           </div>
+
           <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
-            <div
-              class="h-full rounded-full transition-all"
-              :class="window.barClass"
-              :style="{ width: window.percent + '%' }"
-            />
+            <div class="h-full rounded-full transition-all" :class="window.barClass" :style="{ width: window.percent + '%' }" />
           </div>
-          <div class="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <span>{{ window.usedLabel }}</span>
-            <span>{{ t('admin.accounts.zcode.quota.resetsAt', { time: window.resetsAtLabel }) }}</span>
-          </div>
-        </div>
-      </div>
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.zcode.quota.resetsAt', { time: window.resetsAtLabel }) }}
+          </p>
 
-      <!-- 重置卡 -->
-      <div class="rounded-xl border border-gray-200 dark:border-dark-600">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 dark:border-dark-700">
-          <div>
-            <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ t('admin.accounts.zcode.resetCards.cardsTitle') }}
-            </p>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.zcode.resetCards.cardsHint') }}
-            </p>
-          </div>
-        </div>
-
-        <div v-if="loading && !cards.length" class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-          {{ t('common.loading') }}
-        </div>
-        <div v-else-if="!cards.length" class="px-4 py-8 text-center">
-          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.accounts.zcode.resetCards.empty') }}</p>
-          <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ t('admin.accounts.zcode.resetCards.emptyHint') }}</p>
-        </div>
-        <div v-else class="divide-y divide-gray-100 dark:divide-dark-700">
-          <div
-            v-for="group in cardGroups"
-            :key="group.type"
-            class="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-          >
+          <!-- 重置卡：剩余张数 / 最近到期 / 重置按钮 -->
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
             <div class="min-w-0">
-              <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ group.title }}</p>
-              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                {{
-                  t('admin.accounts.zcode.resetCards.availableCount', {
-                    count: group.cards.length,
-                    time: group.earliestLabel
-                  })
-                }}
+              <p class="text-xs font-medium text-gray-700 dark:text-gray-200">
+                {{ t('admin.accounts.zcode.resetCards.remainingCount', { count: window.cardCount }) }}
+              </p>
+              <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                {{ window.earliestLabel }}
               </p>
             </div>
             <button
               type="button"
               class="btn btn-secondary text-xs"
-              :disabled="using === group.type || group.cards.length === 0"
-              @click="useCard(group.type)"
+              :disabled="using === window.resetType || window.cardCount === 0"
+              :data-testid="`zcode-use-reset-${window.key}`"
+              @click="useCard(window.resetType)"
             >
-              <Icon v-if="using === group.type" name="refresh" size="sm" class="mr-1 animate-spin" />
+              <Icon v-if="using === window.resetType" name="refresh" size="sm" class="mr-1 animate-spin" />
               <Icon v-else name="bolt" size="sm" class="mr-1" />
               {{ t('admin.accounts.zcode.resetCards.use') }}
             </button>
@@ -113,22 +81,12 @@
         {{ actionError }}
       </div>
 
-      <!-- 单卡清单（折叠展示全部卡券过期时间） -->
-      <details v-if="cards.length" class="rounded-xl border border-gray-200 px-4 py-3 dark:border-dark-600">
-        <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300">
-          {{ t('admin.accounts.zcode.resetCards.cardList') }}
-        </summary>
-        <ul class="mt-2 space-y-1">
-          <li
-            v-for="card in cards"
-            :key="card.type + card.expires_at"
-            class="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400"
-          >
-            <span>{{ typeLabel(card.type) }}</span>
-            <span>{{ formatDateTime(card.expires_at) }} · {{ remainingText(card) }}</span>
-          </li>
-        </ul>
-      </details>
+      <div v-if="loading && !cards.length" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+        {{ t('common.loading') }}
+      </div>
+      <p v-else-if="!cards.length" class="text-xs text-gray-500 dark:text-gray-400">
+        {{ t('admin.accounts.zcode.resetCards.emptyHint') }}
+      </p>
 
       <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.zcode.resetCards.useHint') }}</p>
     </div>
@@ -143,7 +101,7 @@ import Icon from '@/components/icons/Icon.vue'
 import zcodeAPI, { type ZCodeResetCard } from '@/api/admin/zcode'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import type { Account, AccountUsageInfo } from '@/types'
+import type { Account } from '@/types'
 
 interface Props {
   show: boolean
@@ -157,17 +115,15 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const loading = ref(false)
-const usageLoading = ref(false)
 const using = ref('')
 const cards = ref<ZCodeResetCard[]>([])
-const observedAt = ref<string>('')
-const usage = ref<AccountUsageInfo | null>(null)
+const detail = ref<Account | null>(null)
 const autoClaim = ref(true)
 const peakPause = ref(false)
 const actionError = ref('')
 
-const observedAtText = computed(() => (observedAt.value ? formatDateTime(observedAt.value) : '-'))
-const accountExtra = computed(() => (props.account?.extra ?? {}) as Record<string, unknown>)
+const currentAccount = computed(() => detail.value ?? props.account)
+const accountExtra = computed(() => (currentAccount.value?.extra ?? {}) as Record<string, unknown>)
 
 function formatDateTime(value?: string | null): string {
   if (!value) return '-'
@@ -176,43 +132,56 @@ function formatDateTime(value?: string | null): string {
   return d.toLocaleString()
 }
 
-function clampPercent(value: number | undefined | null): number {
-  if (!Number.isFinite(value ?? NaN)) return 0
-  return Math.max(0, Math.min(100, Math.round(value as number)))
+function clampPercent(value: unknown): number {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return 0
+  return Math.max(0, Math.min(100, Math.round(num)))
 }
 
-function usageWindowTitle(key: 'five_hour' | 'seven_day'): string {
-  return key === 'five_hour'
-    ? t('admin.accounts.zcode.quota.fiveHour')
-    : t('admin.accounts.zcode.quota.weekly')
+const usageUpdatedAtText = computed(() => {
+  const value = accountExtra.value.zhipu_usage_updated_at
+  return typeof value === 'string' ? formatDateTime(value) : '-'
+})
+
+function cardsOfType(type: string): ZCodeResetCard[] {
+  return cards.value.filter((card) => card.type === type)
 }
 
-function usageWindowDesc(key: 'five_hour' | 'seven_day'): string {
-  return key === 'five_hour'
-    ? t('admin.accounts.zcode.quota.fiveHourDesc')
-    : t('admin.accounts.zcode.quota.weeklyDesc')
+function earliestExpiryLabel(list: ZCodeResetCard[]): string {
+  const stamps = list
+    .map((card) => new Date(card.expires_at).getTime())
+    .filter((value) => Number.isFinite(value) && value > 0)
+  if (!stamps.length) return t('admin.accounts.zcode.resetCards.noCards')
+  return t('admin.accounts.zcode.resetCards.nearestExpiry', {
+    time: formatDateTime(new Date(Math.min(...stamps)).toISOString())
+  })
 }
 
 const quotaWindows = computed(() => {
-  const build = (key: 'five_hour' | 'seven_day') => {
-    const window = usage.value?.[key] ?? null
-    const percent = clampPercent(window?.utilization)
+  const build = (opts: {
+    key: 'five_hour' | 'weekly'
+    resetType: string
+    title: string
+    description: string
+    usedKey: string
+    resetKey: string
+  }) => {
+    const usedValue = accountExtra.value[opts.usedKey]
+    const hasUsage = typeof usedValue === 'number' || typeof usedValue === 'string'
+    const percent = hasUsage ? clampPercent(usedValue) : 0
+    const resetValue = accountExtra.value[opts.resetKey]
+    const groupCards = cardsOfType(opts.resetType)
     return {
-      key,
-      title: usageWindowTitle(key),
-      description: usageWindowDesc(key),
+      key: opts.key,
+      resetType: opts.resetType,
+      title: opts.title,
+      description: opts.description,
       percent,
-      percentLabel: window ? `${percent}%` : '-',
-      usedLabel: window
-        ? t('admin.accounts.zcode.quota.used')
-        : t('admin.accounts.zcode.quota.noData'),
-      resetsAtLabel: window?.resets_at ? formatDateTime(window.resets_at) : '-',
-      barClass:
-        percent >= 90
-          ? 'bg-red-500'
-          : percent >= 70
-            ? 'bg-amber-500'
-            : 'bg-primary-500',
+      percentLabel: hasUsage ? `${percent}%` : '-',
+      resetsAtLabel: typeof resetValue === 'string' ? formatDateTime(resetValue) : '-',
+      cardCount: groupCards.length,
+      earliestLabel: earliestExpiryLabel(groupCards),
+      barClass: percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-amber-500' : 'bg-primary-500',
       badgeClass:
         percent >= 90
           ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
@@ -221,87 +190,61 @@ const quotaWindows = computed(() => {
             : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
     }
   }
-  return [build('five_hour'), build('seven_day')]
-})
 
-function typeLabel(type: string): string {
-  return type === '5h'
-    ? t('admin.accounts.zcode.resetCards.type5h')
-    : t('admin.accounts.zcode.resetCards.typeWeek')
-}
-
-function earliestExpiry(list: ZCodeResetCard[]): number | null {
-  const stamps = list
-    .map((card) => new Date(card.expires_at).getTime())
-    .filter((value) => Number.isFinite(value) && value > 0)
-  if (!stamps.length) return null
-  return Math.min(...stamps)
-}
-
-const cardGroups = computed(() => {
-  const types = ['5h', 'week']
-  return types
-    .map((type) => {
-      const groupCards = cards.value.filter((card) => card.type === type)
-      const earliest = earliestExpiry(groupCards)
-      return {
-        type,
-        title: typeLabel(type),
-        cards: groupCards,
-        earliestLabel: earliest ? formatDateTime(new Date(earliest).toISOString()) : '-'
-      }
+  return [
+    build({
+      key: 'five_hour',
+      resetType: 'FIVE_HOUR',
+      title: t('admin.accounts.zcode.quota.fiveHour'),
+      description: t('admin.accounts.zcode.quota.fiveHourDesc'),
+      usedKey: 'zhipu_5h_used_percent',
+      resetKey: 'zhipu_5h_reset_at'
+    }),
+    build({
+      key: 'weekly',
+      resetType: 'WEEK',
+      title: t('admin.accounts.zcode.quota.weekly'),
+      description: t('admin.accounts.zcode.quota.weeklyDesc'),
+      usedKey: 'zhipu_weekly_used_percent',
+      resetKey: 'zhipu_weekly_reset_at'
     })
-    .filter((group) => group.cards.length > 0)
+  ]
 })
-
-function remainingText(card: ZCodeResetCard): string {
-  const expires = new Date(card.expires_at).getTime()
-  if (Number.isNaN(expires)) return '-'
-  const diff = expires - Date.now()
-  if (diff <= 0) return t('admin.accounts.zcode.resetCards.expired')
-  const hours = Math.floor(diff / 3600000)
-  if (hours >= 24) {
-    return t('admin.accounts.zcode.resetCards.remainingDays', { days: Math.floor(hours / 24), hours: hours % 24 })
-  }
-  return t('admin.accounts.zcode.resetCards.remainingHours', { hours })
-}
-
-async function loadCards(force = false) {
-  if (!props.account) return
-  loading.value = true
-  try {
-    const inventory = await zcodeAPI.getResetCards(props.account.id, force)
-    cards.value = inventory?.cards ?? []
-    observedAt.value = inventory?.observed_at ?? ''
-  } catch (error: any) {
-    appStore.showError(error?.response?.data?.message || error?.message || String(error))
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadUsage() {
-  if (!props.account) return
-  usageLoading.value = true
-  try {
-    usage.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
-  } catch (error: any) {
-    // 额度查询失败不阻塞重置卡操作
-    console.warn('Failed to load zcode quota:', error?.message || error)
-    usage.value = null
-  } finally {
-    usageLoading.value = false
-  }
-}
-
-const reload = () => {
-  void loadCards(true)
-  void loadUsage()
-}
 
 function syncSettingsFromAccount() {
   autoClaim.value = accountExtra.value.zcode_auto_claim !== false
   peakPause.value = accountExtra.value.zcode_peak_pause === true
+}
+
+async function loadAccount() {
+  if (!props.account) return
+  try {
+    detail.value = await adminAPI.accounts.getById(props.account.id)
+  } catch (error: any) {
+    console.warn('Failed to load zcode account detail:', error?.message || error)
+  }
+}
+
+async function loadCards(force = false) {
+  if (!props.account) return
+  try {
+    const inventory = await zcodeAPI.getResetCards(props.account.id, force)
+    cards.value = inventory?.cards ?? []
+  } catch (error: any) {
+    appStore.showError(error?.response?.data?.message || error?.message || String(error))
+  }
+}
+
+async function reload() {
+  if (!props.account) return
+  loading.value = true
+  actionError.value = ''
+  try {
+    await Promise.all([loadAccount(), loadCards(true)])
+    syncSettingsFromAccount()
+  } finally {
+    loading.value = false
+  }
 }
 
 async function saveSettings() {
@@ -317,16 +260,15 @@ async function saveSettings() {
   }
 }
 
-async function useCard(type: string) {
+async function useCard(resetType: string) {
   if (!props.account) return
-  using.value = type
+  using.value = resetType
   actionError.value = ''
   try {
-    const inventory = await zcodeAPI.useResetCard(props.account.id, type)
+    const inventory = await zcodeAPI.useResetCard(props.account.id, resetType)
     cards.value = inventory?.cards ?? []
-    observedAt.value = inventory?.observed_at ?? ''
     appStore.showSuccess(t('admin.accounts.zcode.resetCards.used'))
-    void loadUsage()
+    void loadAccount()
   } catch (error: any) {
     actionError.value = error?.response?.data?.message || error?.message || String(error)
   } finally {
@@ -342,11 +284,11 @@ watch(
   () => props.show,
   (visible) => {
     if (!visible) return
-    syncSettingsFromAccount()
     cards.value = []
-    usage.value = null
+    detail.value = null
     actionError.value = ''
-    reload()
+    syncSettingsFromAccount()
+    void reload()
   }
 )
 </script>

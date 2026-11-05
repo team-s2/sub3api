@@ -1,6 +1,6 @@
 export default {
     accounts: {
-      title: 'Account Management',
+      title: 'Channel Management',
       description: 'Manage AI platform accounts and credentials',
       createAccount: 'Add Channel',
       card: {
@@ -13,6 +13,7 @@ export default {
       },
       zcode: {
         quota: {
+          usageUpdatedAt: 'Quota updated at {time}',
           button: 'Quota',
           title: 'ZCode quota details',
           fiveHour: '5-hour window',
@@ -31,6 +32,9 @@ export default {
           'Signing in through ZCode OAuth reuses or provisions the CodingPlan key automatically; the account always routes to the ultra endpoint (official 1.5x quota) and is billed at its normal rate multiplier.',
         oauthNotReady: 'Complete the ZCode authorization first',
         resetCards: {
+          remainingCount: 'Reset cards: {count}',
+          noCards: 'No reset cards available',
+          nearestExpiry: 'Nearest expiry: {time}',
           cardsTitle: 'Reset cards',
           cardsHint: 'Consume a card to reset the matching quota window immediately',
           availableCount: '{count} available · earliest expires {time}',
@@ -183,9 +187,9 @@ export default {
       crsUpdateBehaviorNote:
         'Existing accounts only sync fields returned by CRS; missing fields keep their current values. Credentials are merged by key — keys not returned by CRS are preserved. Proxies are kept when "Sync proxies" is unchecked.',
       crsBack: 'Back',
-      editAccount: 'Edit Account',
-      deleteAccount: 'Delete Account',
-      searchAccounts: 'Search accounts...',
+      editAccount: 'Edit Channel',
+      deleteAccount: 'Delete Channel',
+      searchAccounts: 'Search channels...',
       notes: 'Notes',
       notesPlaceholder: 'Enter notes',
       notesHint: 'Notes are optional',
@@ -680,7 +684,7 @@ export default {
       createSparkShadowConfirm: 'Create a spark shadow account linked to "{name}"? It shares the parent\'s credentials and serves only spark models.',
       createSparkShadowSuccess: 'Spark shadow account created',
       createSparkShadowFailed: 'Failed to create spark shadow account',
-      duplicateAccount: 'Duplicate Account',
+      duplicateAccount: 'Duplicate Channel',
       duplicateSuccess: 'Account duplicated as "{name}" and paused. Review its credentials before enabling it.',
       duplicateFailed: 'Failed to duplicate account',
       resetStatus: 'Reset Status',
@@ -690,7 +694,7 @@ export default {
       failedToRefresh: 'Failed to refresh token',
       failedToDelete: 'Failed to delete account',
       failedToClearRateLimit: 'Failed to clear rate limit',
-      deleteConfirm: "Are you sure you want to delete '{name}'? This action cannot be undone.",
+      deleteConfirm: "Are you sure you want to delete channel '{name}'? This action cannot be undone.",
       // Create/Edit Account Modal
       platform: 'Platform',
       accountName: 'Account Name',

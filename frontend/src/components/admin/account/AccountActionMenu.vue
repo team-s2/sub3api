@@ -55,9 +55,10 @@
               <Icon name="refresh" size="sm" />
               {{ t('admin.accounts.resetQuota') }}
             </button>
-            <button v-if="isZCodeAccount" @click="$emit('reset-cards', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-indigo-600 hover:bg-gray-100 dark:hover:bg-dark-700">
-              <Icon name="gift" size="sm" />
-              {{ t('admin.accounts.zcode.resetCards.menuEntry') }}
+            <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+            <button @click="$emit('delete', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+              <Icon name="trash" size="sm" />
+              {{ t('admin.accounts.deleteAccount') }}
             </button>
           </template>
         </div>
@@ -75,7 +76,7 @@ import type { Account } from '@/types'
 import { supportsAccountQuota } from '@/utils/accountQuota'
 
 const props = defineProps<{ show: boolean; account: Account | null; anchorRect: DOMRect | null }>()
-const emit = defineEmits(['close', 'test', 'stats', 'schedule', 'duplicate', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'reset-cards', 'set-privacy', 'create-spark-shadow'])
+const emit = defineEmits(['close', 'test', 'stats', 'schedule', 'duplicate', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy', 'create-spark-shadow', 'delete'])
 const { t } = useI18n()
 const menuRef = ref<HTMLElement | null>(null)
 const { width: viewportWidth, height: viewportHeight } = useWindowSize()
@@ -109,14 +110,6 @@ const updatePosition = () => {
 // Measure after rendering; menu items and translated labels can change its size.
 watch([menuRef, () => props.anchorRect, viewportWidth, viewportHeight], updatePosition, { flush: 'post' })
 useResizeObserver(menuRef, updatePosition)
-
-// ZCode OAuth 登录的账号持有重置卡凭据（credentials.zcode_user_id），仅这类账号展示重置卡入口。
-const isZCodeAccount = computed(() => {
-  const account = props.account
-  if (!account || account.platform !== 'zhipu') return false
-  const credentials = (account.credentials ?? {}) as Record<string, unknown>
-  return typeof credentials.zcode_user_id === 'string' && credentials.zcode_user_id !== ''
-})
 
 const canDuplicate = computed(() => {
   if (!props.account || props.account.parent_account_id != null) return false
