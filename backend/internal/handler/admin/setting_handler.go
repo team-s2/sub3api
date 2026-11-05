@@ -241,6 +241,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		GitHubOAuthClientSecretConfigured:                      settings.GitHubOAuthClientSecretConfigured,
 		GitHubOAuthRedirectURL:                                 settings.GitHubOAuthRedirectURL,
 		GitHubOAuthFrontendRedirectURL:                         settings.GitHubOAuthFrontendRedirectURL,
+		GitHubOAuthOrgWhitelist:                                settings.GitHubOAuthOrgWhitelist,
 		GoogleOAuthEnabled:                                     settings.GoogleOAuthEnabled,
 		GoogleOAuthClientID:                                    settings.GoogleOAuthClientID,
 		GoogleOAuthClientSecretConfigured:                      settings.GoogleOAuthClientSecretConfigured,

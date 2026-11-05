@@ -142,6 +142,7 @@ type SystemSettings struct {
 	GitHubOAuthClientSecretConfigured bool
 	GitHubOAuthRedirectURL            string
 	GitHubOAuthFrontendRedirectURL    string
+	GitHubOAuthOrgWhitelist           GitHubOrgWhitelist
 	GoogleOAuthEnabled                bool
 	GoogleOAuthClientID               string
 	GoogleOAuthClientSecret           string

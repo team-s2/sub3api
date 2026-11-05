@@ -1176,6 +1176,12 @@ func applyPendingOAuthBindingTx(
 	if tx == nil || session == nil {
 		return nil
 	}
+	if session.ProviderType == "github" {
+		proof := pendingSessionStringValue(session.UpstreamIdentityClaims, service.GitHubOrgWhitelistProofKey)
+		if err := authService.ValidateGitHubOrgWhitelistProof(ctx, session.ProviderSubject, proof); err != nil {
+			return err
+		}
+	}
 	if !forceBind && !shouldBindPendingOAuthIdentity(session, decision) {
 		return nil
 	}
@@ -1472,6 +1478,13 @@ func readPendingOAuthBrowserSession(c *gin.Context, h *AuthHandler) (*service.Au
 	if err != nil {
 		clearCookies()
 		return nil, nil, clearCookies, err
+	}
+	if session.ProviderType == "github" {
+		proof := pendingSessionStringValue(session.UpstreamIdentityClaims, service.GitHubOrgWhitelistProofKey)
+		if err := h.authService.ValidateGitHubOrgWhitelistProof(c.Request.Context(), session.ProviderSubject, proof); err != nil {
+			clearCookies()
+			return nil, nil, clearCookies, err
+		}
 	}
 
 	return svc, session, clearCookies, nil

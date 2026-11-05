@@ -587,6 +587,7 @@ export interface SystemSettings {
   oidc_connect_userinfo_email_path: string;
   oidc_connect_userinfo_id_path: string;
   oidc_connect_userinfo_username_path: string;
+  github_oauth_org_whitelist: { enabled: boolean; organizations: string[] };
   github_oauth_enabled: boolean;
   github_oauth_client_id: string;
   github_oauth_client_secret_configured: boolean;
@@ -929,6 +930,7 @@ export interface UpdateSettingsRequest {
   oidc_connect_userinfo_email_path?: string;
   oidc_connect_userinfo_id_path?: string;
   oidc_connect_userinfo_username_path?: string;
+  github_oauth_org_whitelist?: { enabled: boolean; organizations: string[] };
   github_oauth_enabled?: boolean;
   github_oauth_client_id?: string;
   github_oauth_client_secret?: string;

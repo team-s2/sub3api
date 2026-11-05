@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -424,6 +425,7 @@ func (s *SettingService) GetEmailOAuthProviderConfig(ctx context.Context, provid
 		SettingKeyGitHubOAuthClientSecret,
 		SettingKeyGitHubOAuthRedirectURL,
 		SettingKeyGitHubOAuthFrontendRedirectURL,
+		SettingKeyGitHubOAuthOrgWhitelist,
 		SettingKeyGoogleOAuthEnabled,
 		SettingKeyGoogleOAuthClientID,
 		SettingKeyGoogleOAuthClientSecret,
@@ -435,6 +437,15 @@ func (s *SettingService) GetEmailOAuthProviderConfig(ctx context.Context, provid
 		return config.EmailOAuthProviderConfig{}, fmt.Errorf("get email oauth settings: %w", err)
 	}
 	cfg := s.effectiveEmailOAuthConfig(settings, provider)
+	if provider == "github" {
+		policy, err := parseGitHubOrgWhitelist(settings[SettingKeyGitHubOAuthOrgWhitelist])
+		if err != nil {
+			return config.EmailOAuthProviderConfig{}, infraerrors.ServiceUnavailable("GITHUB_ORG_WHITELIST_UNAVAILABLE", "GitHub organization policy is invalid").WithCause(err)
+		}
+		if policy.Enabled && !slices.Contains(strings.Fields(cfg.Scopes), "read:org") {
+			cfg.Scopes = strings.TrimSpace(cfg.Scopes + " read:org")
+		}
+	}
 	if !cfg.Enabled {
 		return config.EmailOAuthProviderConfig{}, infraerrors.NotFound("OAUTH_DISABLED", "oauth login is disabled")
 	}

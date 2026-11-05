@@ -2641,6 +2641,36 @@
                         placeholder="/auth/oauth/callback"
                       />
                     </div>
+                    <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+                      <div class="flex items-center justify-between gap-4">
+                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {{ localText("限制 GitHub 组织成员登录", "Restrict GitHub login to organization members") }}
+                        </label>
+                        <Toggle
+                          v-model="form.github_oauth_org_whitelist.enabled"
+                          data-testid="github-org-whitelist-enabled"
+                        />
+                      </div>
+                      <template v-if="form.github_oauth_org_whitelist.enabled">
+                        <label for="github-org-whitelist" class="mb-2 mt-3 block text-sm text-gray-700 dark:text-gray-300">
+                          {{ localText("允许的组织", "Allowed organizations") }}
+                        </label>
+                        <textarea
+                          id="github-org-whitelist"
+                          v-model="githubOrgWhitelistText"
+                          data-testid="github-org-whitelist-organizations"
+                          rows="3"
+                          class="input font-mono text-sm"
+                          placeholder="team-s2"
+                        />
+                        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          {{ localText(
+                            "组织登录名用逗号、空格或换行分隔，属于任一组织的正式成员即可登录；留空时拒绝所有 GitHub 登录。需要 read:org 权限，组织启用第三方应用限制时须批准此 OAuth App。已有用户需重新授权。",
+                            "Separate organization logins with commas, spaces, or newlines. Active membership in any listed organization permits access; an empty list denies all GitHub logins. The read:org scope and organization approval of the OAuth App may be required. Existing users must authorize again.",
+                          ) }}
+                        </p>
+                      </template>
+                    </div>
                   </div>
                 </div>
 
@@ -9925,6 +9955,7 @@ const form = reactive<SettingsForm>({
   oidc_connect_userinfo_username_path: "",
   // GitHub / Google 邮箱快捷登录
   github_oauth_enabled: false,
+  github_oauth_org_whitelist: { enabled: false, organizations: [] },
   github_oauth_client_id: "",
   github_oauth_client_secret: "",
   github_oauth_client_secret_configured: false,
@@ -10697,6 +10728,13 @@ async function setAndCopyLinuxdoRedirectUrl() {
 }
 
 type EmailOAuthProvider = "github" | "google";
+
+const githubOrgWhitelistText = computed({
+  get: () => form.github_oauth_org_whitelist.organizations.join("\n"),
+  set: (value: string) => {
+    form.github_oauth_org_whitelist.organizations = value.split(/[\s,]+/).filter(Boolean);
+  },
+});
 
 const githubOAuthRedirectUrlSuggestion = computed(() => {
   return buildApiCallbackUrl("/auth/oauth/github/callback");
@@ -11591,6 +11629,7 @@ async function saveSettings() {
       oidc_connect_userinfo_username_path:
         form.oidc_connect_userinfo_username_path,
       github_oauth_enabled: form.github_oauth_enabled,
+      github_oauth_org_whitelist: form.github_oauth_org_whitelist,
       github_oauth_client_id: form.github_oauth_client_id,
       github_oauth_client_secret:
         form.github_oauth_client_secret || undefined,

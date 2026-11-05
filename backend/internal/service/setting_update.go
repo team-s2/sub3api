@@ -294,6 +294,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	// GitHub / Google 邮箱快捷登录
+	if err := settings.GitHubOAuthOrgWhitelist.Normalize(); err != nil {
+		return nil, infraerrors.BadRequest("GITHUB_ORG_WHITELIST_INVALID", err.Error())
+	}
+	gitHubOrgWhitelistJSON, err := json.Marshal(settings.GitHubOAuthOrgWhitelist)
+	if err != nil {
+		return nil, fmt.Errorf("marshal GitHub organization whitelist: %w", err)
+	}
+	updates[SettingKeyGitHubOAuthOrgWhitelist] = string(gitHubOrgWhitelistJSON)
 	updates[SettingKeyGitHubOAuthEnabled] = strconv.FormatBool(settings.GitHubOAuthEnabled)
 	updates[SettingKeyGitHubOAuthClientID] = strings.TrimSpace(settings.GitHubOAuthClientID)
 	updates[SettingKeyGitHubOAuthRedirectURL] = settings.GitHubOAuthRedirectURL

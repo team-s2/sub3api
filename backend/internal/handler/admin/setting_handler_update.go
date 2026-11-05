@@ -141,16 +141,17 @@ type UpdateSettingsRequest struct {
 	OIDCConnectUserInfoIDPath       string `json:"oidc_connect_userinfo_id_path"`
 	OIDCConnectUserInfoUsernamePath string `json:"oidc_connect_userinfo_username_path"`
 
-	GitHubOAuthEnabled             bool   `json:"github_oauth_enabled"`
-	GitHubOAuthClientID            string `json:"github_oauth_client_id"`
-	GitHubOAuthClientSecret        string `json:"github_oauth_client_secret"`
-	GitHubOAuthRedirectURL         string `json:"github_oauth_redirect_url"`
-	GitHubOAuthFrontendRedirectURL string `json:"github_oauth_frontend_redirect_url"`
-	GoogleOAuthEnabled             bool   `json:"google_oauth_enabled"`
-	GoogleOAuthClientID            string `json:"google_oauth_client_id"`
-	GoogleOAuthClientSecret        string `json:"google_oauth_client_secret"`
-	GoogleOAuthRedirectURL         string `json:"google_oauth_redirect_url"`
-	GoogleOAuthFrontendRedirectURL string `json:"google_oauth_frontend_redirect_url"`
+	GitHubOAuthEnabled             bool                        `json:"github_oauth_enabled"`
+	GitHubOAuthClientID            string                      `json:"github_oauth_client_id"`
+	GitHubOAuthClientSecret        string                      `json:"github_oauth_client_secret"`
+	GitHubOAuthRedirectURL         string                      `json:"github_oauth_redirect_url"`
+	GitHubOAuthFrontendRedirectURL string                      `json:"github_oauth_frontend_redirect_url"`
+	GitHubOAuthOrgWhitelist        *service.GitHubOrgWhitelist `json:"github_oauth_org_whitelist"`
+	GoogleOAuthEnabled             bool                        `json:"google_oauth_enabled"`
+	GoogleOAuthClientID            string                      `json:"google_oauth_client_id"`
+	GoogleOAuthClientSecret        string                      `json:"google_oauth_client_secret"`
+	GoogleOAuthRedirectURL         string                      `json:"google_oauth_redirect_url"`
+	GoogleOAuthFrontendRedirectURL string                      `json:"google_oauth_frontend_redirect_url"`
 
 	// OEM设置
 	SiteName                    string                `json:"site_name"`
@@ -1635,6 +1636,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GitHubOAuthClientSecret:                req.GitHubOAuthClientSecret,
 		GitHubOAuthRedirectURL:                 req.GitHubOAuthRedirectURL,
 		GitHubOAuthFrontendRedirectURL:         req.GitHubOAuthFrontendRedirectURL,
+		GitHubOAuthOrgWhitelist:                previousSettings.GitHubOAuthOrgWhitelist,
 		GoogleOAuthEnabled:                     req.GoogleOAuthEnabled,
 		GoogleOAuthClientID:                    req.GoogleOAuthClientID,
 		GoogleOAuthClientSecret:                req.GoogleOAuthClientSecret,
@@ -2101,6 +2103,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
+	if req.GitHubOAuthOrgWhitelist != nil {
+		settings.GitHubOAuthOrgWhitelist = *req.GitHubOAuthOrgWhitelist
+	} else {
+		omitted[service.SettingKeyGitHubOAuthOrgWhitelist] = struct{}{}
+	}
 	if err := h.settingService.UpdateSettingsWithAuthSourceDefaultsOmitting(c.Request.Context(), settings, authSourceDefaults, omitted); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -2299,6 +2306,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GitHubOAuthClientSecretConfigured:                      updatedSettings.GitHubOAuthClientSecretConfigured,
 		GitHubOAuthRedirectURL:                                 updatedSettings.GitHubOAuthRedirectURL,
 		GitHubOAuthFrontendRedirectURL:                         updatedSettings.GitHubOAuthFrontendRedirectURL,
+		GitHubOAuthOrgWhitelist:                                updatedSettings.GitHubOAuthOrgWhitelist,
 		GoogleOAuthEnabled:                                     updatedSettings.GoogleOAuthEnabled,
 		GoogleOAuthClientID:                                    updatedSettings.GoogleOAuthClientID,
 		GoogleOAuthClientSecretConfigured:                      updatedSettings.GoogleOAuthClientSecretConfigured,

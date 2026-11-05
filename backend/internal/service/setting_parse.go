@@ -734,6 +734,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.GitHubOAuthClientSecretConfigured = result.GitHubOAuthClientSecret != ""
 	result.GitHubOAuthRedirectURL = strings.TrimSpace(gitHubEffective.RedirectURL)
 	result.GitHubOAuthFrontendRedirectURL = strings.TrimSpace(gitHubEffective.FrontendRedirectURL)
+	gitHubOrgWhitelist, orgWhitelistErr := parseGitHubOrgWhitelist(settings[SettingKeyGitHubOAuthOrgWhitelist])
+	result.GitHubOAuthOrgWhitelist = gitHubOrgWhitelist
+	if orgWhitelistErr != nil {
+		// Keep malformed persisted policies restrictive until an administrator replaces them.
+		result.GitHubOAuthOrgWhitelist = GitHubOrgWhitelist{Enabled: true, Organizations: []string{}}
+	}
 
 	googleEffective := s.effectiveEmailOAuthConfig(settings, "google")
 	result.GoogleOAuthEnabled = googleEffective.Enabled

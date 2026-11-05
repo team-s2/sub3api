@@ -151,6 +151,12 @@ func (h *AuthHandler) emailOAuthCallback(c *gin.Context, provider string) {
 		redirectOAuthError(c, frontendCallback, "userinfo_failed", "failed to fetch verified email", singleLine(err.Error()))
 		return
 	}
+	if provider == "github" {
+		if err := h.verifyGitHubOrganizationMembership(c.Request.Context(), cfg, tokenResp, profile); err != nil {
+			redirectOAuthError(c, frontendCallback, infraerrors.Reason(err), infraerrors.Message(err), "")
+			return
+		}
+	}
 	h.emailOAuthCallbackWithProfile(c, provider, cfg, frontendCallback, redirectTo, profile)
 }
 
@@ -162,6 +168,13 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 	redirectTo string,
 	profile *emailOAuthProfile,
 ) {
+	if provider == "github" {
+		proof := pendingSessionStringValue(profile.Metadata, service.GitHubOrgWhitelistProofKey)
+		if err := h.authService.ValidateGitHubOrgWhitelistProof(c.Request.Context(), profile.Subject, proof); err != nil {
+			redirectOAuthError(c, frontendCallback, infraerrors.Reason(err), infraerrors.Message(err), "")
+			return
+		}
+	}
 	input := service.EmailOAuthIdentityInput{
 		ProviderType:     provider,
 		ProviderKey:      provider,
