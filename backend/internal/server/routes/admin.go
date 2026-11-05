@@ -63,6 +63,9 @@ func RegisterAdminRoutes(
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
 
+		// ZCode（Z.ai / BigModel）OAuth + ultra 端点账号
+		registerZCodeOAuthRoutes(admin, h)
+
 		// 国产供应商（kimi/zhipu/deepseek）额度与余额
 		registerCNProviderRoutes(admin, h)
 
@@ -504,6 +507,18 @@ func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		grok.GET("/accounts/:id/quota", h.Admin.GrokOAuth.QueryQuota)
 		grok.POST("/accounts/:id/reset-quota", h.Admin.GrokOAuth.ResetQuota)
 		grok.GET("/runtime-sanity", h.Admin.GrokOAuth.RuntimeSanity)
+	}
+}
+
+// registerZCodeOAuthRoutes 注册 ZCode（Z.ai / BigModel）OAuth 登录与账号开通端点。
+// 登录成功后账号走 ultra 端点（CodingPlan key 鉴权，官方 1.5x 配额口径）。
+func registerZCodeOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	zcode := admin.Group("/zcode")
+	{
+		zcode.GET("/oauth/sites", h.Admin.ZCodeOAuth.GetSites)
+		zcode.POST("/oauth/auth-url", h.Admin.ZCodeOAuth.GenerateAuthURL)
+		zcode.POST("/oauth/poll", h.Admin.ZCodeOAuth.Poll)
+		zcode.POST("/oauth/accounts", h.Admin.ZCodeOAuth.CreateAccount)
 	}
 }
 

@@ -892,6 +892,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOpenAIOAuthService,
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
+	NewZCodeOAuthService,
 	NewGeminiOAuthService,
 	ProvideGeminiCachedContentService,
 	NewGeminiQuotaService,
