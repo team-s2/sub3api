@@ -166,13 +166,30 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		return nil, err
 	}
 
+	user, created, err := s.insertEmailOAuthUser(ctx, email, username, providerType, RoleUser)
+	if err != nil || !created {
+		return user, err
+	}
+	s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
+	if invitationRedeemCode != nil {
+		if err := s.useOAuthRegistrationInvitation(ctx, invitationRedeemCode.ID, user.ID); err != nil {
+			_ = s.RollbackOAuthEmailAccountCreation(ctx, user.ID, invitationCode)
+			return nil, ErrInvitationCodeInvalid
+		}
+	}
+	return user, nil
+}
+
+// insertEmailOAuthUser creates the user with signup defaults. created is false
+// when a concurrent request already took the email and the existing user is returned.
+func (s *AuthService) insertEmailOAuthUser(ctx context.Context, email, username, providerType, role string) (*User, bool, error) {
 	randomPassword, err := randomHexString(32)
 	if err != nil {
-		return nil, ErrServiceUnavailable
+		return nil, false, ErrServiceUnavailable
 	}
 	hashedPassword, err := s.HashPassword(randomPassword)
 	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
+		return nil, false, fmt.Errorf("hash password: %w", err)
 	}
 	grantPlan := s.resolveSignupGrantPlan(ctx, providerType)
 	var defaultRPMLimit int
@@ -183,7 +200,7 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		Email:        email,
 		Username:     strings.TrimSpace(username),
 		PasswordHash: hashedPassword,
-		Role:         RoleUser,
+		Role:         role,
 		Balance:      grantPlan.Balance,
 		Concurrency:  grantPlan.Concurrency,
 		RPMLimit:     defaultRPMLimit,
@@ -194,24 +211,17 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		if errors.Is(err, ErrEmailExists) {
 			existing, loadErr := s.userRepo.GetByEmail(ctx, email)
 			if loadErr != nil {
-				return nil, ErrServiceUnavailable
+				return nil, false, ErrServiceUnavailable
 			}
-			return existing, nil
+			return existing, false, nil
 		}
-		return nil, ErrServiceUnavailable
+		return nil, false, ErrServiceUnavailable
 	}
 	s.postAuthUserBootstrap(ctx, user, providerType, false)
 	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 	// snapshot user × platform quota（fail-open）
 	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
-	s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
-	if invitationRedeemCode != nil {
-		if err := s.useOAuthRegistrationInvitation(ctx, invitationRedeemCode.ID, user.ID); err != nil {
-			_ = s.RollbackOAuthEmailAccountCreation(ctx, user.ID, invitationCode)
-			return nil, ErrInvitationCodeInvalid
-		}
-	}
-	return user, nil
+	return user, true, nil
 }
 
 func (s *AuthService) findEmailOAuthIdentityOwner(ctx context.Context, providerType, providerKey, providerSubject string) (*User, error) {

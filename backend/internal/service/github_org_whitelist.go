@@ -5,13 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 const (
@@ -112,4 +115,82 @@ func (s *AuthService) ValidateGitHubOrgWhitelistProof(ctx context.Context, subje
 		return infraerrors.Forbidden("GITHUB_ORG_ACCESS_DENIED", "GitHub organization membership must be verified; sign in with GitHub again")
 	}
 	return nil
+}
+
+// LoginGitHubOrgMember signs in a GitHub identity whose organization membership was
+// just verified. Membership is the only admission rule: the account is provisioned
+// regardless of the registration settings, and every member is an administrator.
+func (s *AuthService) LoginGitHubOrgMember(ctx context.Context, input EmailOAuthIdentityInput) (*TokenPair, *User, error) {
+	if s == nil || s.userRepo == nil || s.entClient == nil {
+		return nil, nil, ErrServiceUnavailable
+	}
+	const provider = "github"
+	input.ProviderType, input.ProviderKey = provider, provider
+	input.ProviderSubject = strings.TrimSpace(input.ProviderSubject)
+	input.Email = strings.TrimSpace(strings.ToLower(input.Email))
+	proof, _ := input.UpstreamMetadata[GitHubOrgWhitelistProofKey].(string)
+	if proof == "" {
+		return nil, nil, infraerrors.Forbidden("GITHUB_ORG_ACCESS_DENIED", "GitHub organization membership must be verified; sign in with GitHub again")
+	}
+	if err := s.ValidateGitHubOrgWhitelistProof(ctx, input.ProviderSubject, proof); err != nil {
+		return nil, nil, err
+	}
+
+	// The GitHub ID owns the account, so a changed primary email keeps the same user.
+	user, err := s.findEmailOAuthIdentityOwner(ctx, provider, provider, input.ProviderSubject)
+	if err != nil {
+		return nil, nil, err
+	}
+	created := false
+	if user == nil {
+		if user, created, err = s.findOrCreateGitHubOrgMember(ctx, input); err != nil {
+			return nil, nil, err
+		}
+	}
+	if !user.IsActive() {
+		return nil, nil, ErrUserNotActive
+	}
+	if err := s.ensureEmailOAuthIdentity(ctx, user.ID, input); err != nil {
+		return nil, nil, err
+	}
+	if user.Role != RoleAdmin {
+		user.Role = RoleAdmin
+		if err := s.userRepo.Update(ctx, user, UserUpdateFields{Role: true}); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to promote GitHub organization member %d: %v", user.ID, err)
+			return nil, nil, ErrServiceUnavailable
+		}
+	}
+	if !created {
+		if err := s.ApplyProviderDefaultSettingsOnFirstBind(ctx, user.ID, provider); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to apply github first bind defaults: %v", err)
+		}
+	}
+	s.RecordSuccessfulLogin(ctx, user.ID)
+
+	tokenPair, err := s.GenerateTokenPair(ctx, user, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate token pair: %w", err)
+	}
+	return tokenPair, user, nil
+}
+
+func (s *AuthService) findOrCreateGitHubOrgMember(ctx context.Context, input EmailOAuthIdentityInput) (*User, bool, error) {
+	if !input.EmailVerified {
+		return nil, false, infraerrors.Forbidden("OAUTH_EMAIL_NOT_VERIFIED", "oauth email is not verified")
+	}
+	if _, err := mail.ParseAddress(input.Email); err != nil || len(input.Email) > 255 {
+		return nil, false, infraerrors.BadRequest("INVALID_EMAIL", "invalid email")
+	}
+	if isReservedEmail(input.Email) {
+		return nil, false, ErrEmailReserved
+	}
+	user, err := s.userRepo.GetByEmail(ctx, input.Email)
+	if err == nil {
+		return user, false, nil
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		logger.LegacyPrintf("service.auth", "[Auth] Database error during github oauth login: %v", err)
+		return nil, false, ErrServiceUnavailable
+	}
+	return s.insertEmailOAuthUser(ctx, input.Email, input.Username, input.ProviderType, RoleAdmin)
 }

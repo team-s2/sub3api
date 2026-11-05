@@ -168,13 +168,6 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 	redirectTo string,
 	profile *emailOAuthProfile,
 ) {
-	if provider == "github" {
-		proof := pendingSessionStringValue(profile.Metadata, service.GitHubOrgWhitelistProofKey)
-		if err := h.authService.ValidateGitHubOrgWhitelistProof(c.Request.Context(), profile.Subject, proof); err != nil {
-			redirectOAuthError(c, frontendCallback, infraerrors.Reason(err), infraerrors.Message(err), "")
-			return
-		}
-	}
 	input := service.EmailOAuthIdentityInput{
 		ProviderType:     provider,
 		ProviderKey:      provider,
@@ -185,6 +178,22 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 		DisplayName:      profile.DisplayName,
 		AvatarURL:        profile.AvatarURL,
 		UpstreamMetadata: profile.Metadata,
+	}
+	if provider == "github" {
+		proof := pendingSessionStringValue(profile.Metadata, service.GitHubOrgWhitelistProofKey)
+		if err := h.authService.ValidateGitHubOrgWhitelistProof(c.Request.Context(), profile.Subject, proof); err != nil {
+			redirectOAuthError(c, frontendCallback, infraerrors.Reason(err), infraerrors.Message(err), "")
+			return
+		}
+		if proof != "" {
+			tokenPair, _, err := h.authService.LoginGitHubOrgMember(c.Request.Context(), input)
+			if err != nil {
+				redirectOAuthError(c, frontendCallback, infraerrors.Reason(err), infraerrors.Message(err), "")
+				return
+			}
+			redirectEmailOAuthTokens(c, frontendCallback, redirectTo, tokenPair)
+			return
+		}
 	}
 	affiliateCode := h.emailOAuthAffiliateCode(c)
 	if shouldCreate, err := h.emailOAuthShouldCreatePendingRegistration(c.Request.Context(), input); err != nil {
@@ -223,6 +232,10 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 		return
 	}
 
+	redirectEmailOAuthTokens(c, frontendCallback, redirectTo, tokenPair)
+}
+
+func redirectEmailOAuthTokens(c *gin.Context, frontendCallback, redirectTo string, tokenPair *service.TokenPair) {
 	fragment := url.Values{}
 	fragment.Set("access_token", tokenPair.AccessToken)
 	fragment.Set("refresh_token", tokenPair.RefreshToken)
