@@ -1,6 +1,9 @@
 package service
 
-import "context"
+import (
+	"context"
+	"strconv"
+)
 
 // InvalidateAuthCacheByKey 清除指定 API Key 的认证缓存
 func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string) {
@@ -27,6 +30,9 @@ func (s *APIKeyService) InvalidateAuthCacheByUserID(ctx context.Context, userID 
 func (s *APIKeyService) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
 	if groupID <= 0 {
 		return
+	}
+	if s.routeGroupCache != nil {
+		s.routeGroupCache.Delete(strconv.FormatInt(groupID, 10))
 	}
 	keys, err := s.apiKeyRepo.ListKeysByGroupID(ctx, groupID)
 	if err != nil {

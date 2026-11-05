@@ -470,6 +470,16 @@ func GroupIDNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldGroupID))
 }
 
+// ExtraGroupIdsIsNil applies the IsNil predicate on the "extra_group_ids" field.
+func ExtraGroupIdsIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldExtraGroupIds))
+}
+
+// ExtraGroupIdsNotNil applies the NotNil predicate on the "extra_group_ids" field.
+func ExtraGroupIdsNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldExtraGroupIds))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))

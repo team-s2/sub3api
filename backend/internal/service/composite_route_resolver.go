@@ -94,6 +94,15 @@ func filterSystemOneRouteModels(routes []CompositeModelRoute, models []string, e
 	return filtered
 }
 
+// GroupAccountsClaimModel reports whether an account in the group explicitly maps model.
+func (r *CompositeRouteResolver) GroupAccountsClaimModel(ctx context.Context, groupID int64, model string) bool {
+	if r == nil || r.modelOwnershipResolver == nil {
+		return false
+	}
+	ownership, err := r.modelOwnershipResolver(ctx, groupID, model)
+	return err == nil && (ownership.Matched || ownership.Ambiguous)
+}
+
 func (r *CompositeRouteResolver) Resolve(ctx context.Context, groupID int64, model, endpoint string) (CompositeRouteDecision, error) {
 	model = strings.TrimSpace(model)
 	endpoint = normalizeCompositeRouteEndpoint(endpoint)
@@ -250,4 +259,29 @@ func matchCompositeRoute(routes []CompositeModelRoute, model, endpoint string) (
 		return a.route.ID < b.route.ID
 	})
 	return candidates[0].route, true
+}
+
+// CompositeRouteEndpointForPath maps a gateway request path to its route endpoint domain.
+func CompositeRouteEndpointForPath(path string) string {
+	switch {
+	case strings.Contains(path, "/messages/count_tokens"):
+		return CompositeRouteEndpointCountTokens
+	case strings.Contains(path, "/messages"):
+		return CompositeRouteEndpointMessages
+	case strings.Contains(path, "/responses"),
+		strings.Contains(path, "/alpha/search"),
+		strings.Contains(path, "/realtime/calls"),
+		strings.HasSuffix(strings.TrimRight(path, "/"), "/live"):
+		return CompositeRouteEndpointResponses
+	case strings.Contains(path, "/chat/completions"):
+		return CompositeRouteEndpointChatCompletions
+	case strings.Contains(path, "/embeddings"):
+		return CompositeRouteEndpointEmbeddings
+	case strings.Contains(path, "/images/"):
+		return CompositeRouteEndpointImages
+	case strings.Contains(path, "/v1beta/"):
+		return CompositeRouteEndpointGemini
+	default:
+		return CompositeRouteEndpointAny
+	}
 }

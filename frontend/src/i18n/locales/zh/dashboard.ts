@@ -116,6 +116,9 @@ export default {
     nameLabel: '名称',
     namePlaceholder: '我的 API 密钥',
     groupLabel: '分组',
+    extraGroupsLabel: '附加分组',
+    extraGroupsHint: '请求会按模型在上方分组和这些分组间路由，优先级为勾选顺序；没有分组匹配的模型走上方分组。',
+    extraGroupsCount: '+{count} 个分组',
     providerLabel: '厂商',
     providers: {
       anthropic: 'Anthropic',

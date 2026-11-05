@@ -1147,6 +1147,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.HasExtraGroups() {
+		writeModelsList(c, service.PlatformComposite, h.multiGroupModels(c.Request.Context(), apiKey))
+		return
+	}
 
 	var groupID *int64
 	var platform string
@@ -1294,6 +1298,29 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 // compositeAvailableModels lists the models the composite group can serve.
 // includeSystemOne adds TypeSafe models, which only work through /v1/systemone;
 // LLM client catalogs (Codex) must exclude them.
+// multiGroupModels merges what each group of a multi-group key would list on its own.
+func (h *GatewayHandler) multiGroupModels(ctx context.Context, apiKey *service.APIKey) []string {
+	var merged []string
+	for _, group := range h.apiKeyService.RoutingGroups(ctx, apiKey) {
+		var models []string
+		switch {
+		case group.Platform == service.PlatformComposite:
+			models = h.compositeAvailableModels(ctx, &group.ID, "", true)
+		case service.IsMultiProtocolAPIKeyProvider(group.Platform):
+			// CN 供应商没有静态默认模型列表，只暴露账号映射键。
+			models = h.gatewayService.GetAvailableModels(ctx, &group.ID, group.Platform)
+		default:
+			available := h.gatewayService.GetAvailableModels(ctx, &group.ID, group.Platform)
+			models = modelListingSource(group.Platform, available, defaultModelIDsForPlatform(group.Platform))
+		}
+		if group.ModelAllowlistEnabled() {
+			models = group.ModelAllowlist.FilterForListing(models)
+		}
+		merged = mergeModelIDs(merged, models)
+	}
+	return merged
+}
+
 func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *int64, endpoint string, includeSystemOne bool) []string {
 	if h == nil || h.gatewayService == nil {
 		return nil

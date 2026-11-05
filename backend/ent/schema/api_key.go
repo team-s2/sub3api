@@ -44,6 +44,9 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.JSON("extra_group_ids", []int64{}).
+			Optional().
+			Comment("Additional groups the key may route to by requested model, in priority order after group_id"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),

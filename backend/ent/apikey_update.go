@@ -120,6 +120,24 @@ func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	return _u
 }
 
+// SetExtraGroupIds sets the "extra_group_ids" field.
+func (_u *APIKeyUpdate) SetExtraGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.SetExtraGroupIds(v)
+	return _u
+}
+
+// AppendExtraGroupIds appends value to the "extra_group_ids" field.
+func (_u *APIKeyUpdate) AppendExtraGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.AppendExtraGroupIds(v)
+	return _u
+}
+
+// ClearExtraGroupIds clears the value of the "extra_group_ids" field.
+func (_u *APIKeyUpdate) ClearExtraGroupIds() *APIKeyUpdate {
+	_u.mutation.ClearExtraGroupIds()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdate) SetStatus(v string) *APIKeyUpdate {
 	_u.mutation.SetStatus(v)
@@ -593,6 +611,17 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ExtraGroupIds(); ok {
+		_spec.SetField(apikey.FieldExtraGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedExtraGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldExtraGroupIds, value)
+		})
+	}
+	if _u.mutation.ExtraGroupIdsCleared() {
+		_spec.ClearField(apikey.FieldExtraGroupIds, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
 	}
@@ -904,6 +933,24 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetExtraGroupIds sets the "extra_group_ids" field.
+func (_u *APIKeyUpdateOne) SetExtraGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.SetExtraGroupIds(v)
+	return _u
+}
+
+// AppendExtraGroupIds appends value to the "extra_group_ids" field.
+func (_u *APIKeyUpdateOne) AppendExtraGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.AppendExtraGroupIds(v)
+	return _u
+}
+
+// ClearExtraGroupIds clears the value of the "extra_group_ids" field.
+func (_u *APIKeyUpdateOne) ClearExtraGroupIds() *APIKeyUpdateOne {
+	_u.mutation.ClearExtraGroupIds()
 	return _u
 }
 
@@ -1409,6 +1456,17 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExtraGroupIds(); ok {
+		_spec.SetField(apikey.FieldExtraGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedExtraGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldExtraGroupIds, value)
+		})
+	}
+	if _u.mutation.ExtraGroupIdsCleared() {
+		_spec.ClearField(apikey.FieldExtraGroupIds, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)

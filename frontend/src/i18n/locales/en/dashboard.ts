@@ -116,6 +116,9 @@ export default {
     nameLabel: 'Name',
     namePlaceholder: 'My API Key',
     groupLabel: 'Group',
+    extraGroupsLabel: 'Additional groups',
+    extraGroupsHint: 'Requests are routed by model across the group above and these groups, in the order you check them. Models that fit no group use the group above.',
+    extraGroupsCount: '+{count} groups',
     providerLabel: 'Provider',
     providers: {
       anthropic: 'Anthropic',

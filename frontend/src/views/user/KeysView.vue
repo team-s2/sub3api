@@ -177,6 +177,10 @@
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
+                <span
+                  v-if="row.extra_group_ids?.length"
+                  class="text-xs text-primary-600 dark:text-primary-400"
+                >{{ t('keys.extraGroupsCount', { count: row.extra_group_ids.length }) }}</span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
                 <svg
                   class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
@@ -578,6 +582,32 @@
               />
             </template>
           </Select>
+        </div>
+
+        <div v-if="extraGroupOptions.length > 0">
+          <span class="input-label">{{ t('keys.extraGroupsLabel') }}</span>
+          <div class="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600">
+            <label
+              v-for="option in extraGroupOptions"
+              :key="option.value"
+              class="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-50 dark:hover:bg-dark-700"
+            >
+              <input
+                v-model="formData.extra_group_ids"
+                type="checkbox"
+                :value="option.value"
+                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <GroupBadge
+                :name="option.label"
+                :platform="option.platform"
+                :subscription-type="option.subscriptionType"
+                :rate-multiplier="option.rate"
+                :user-rate-multiplier="option.userRate"
+              />
+            </label>
+          </div>
+          <p class="input-hint">{{ t('keys.extraGroupsHint') }}</p>
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1432,6 +1462,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const formData = ref({
   name: '',
   group_id: null as number | null,
+  extra_group_ids: [] as number[],
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1537,6 +1568,15 @@ const createProviderOptions = computed(() => KEY_GROUP_PROVIDERS.map((value) => 
 const formGroupOptions = computed(() => showEditModal.value
   ? groupOptions.value
   : groupOptions.value.filter((group) => getKeyGroupProvider(group.platform) === createProvider.value)
+)
+
+const extraGroupOptions = computed(() =>
+  groupOptions.value.filter((group) => group.value !== formData.value.group_id)
+)
+
+// Checked order is the routing priority, so only ids still offered are submitted.
+const submittedExtraGroupIds = computed(() =>
+  formData.value.extra_group_ids.filter((id) => extraGroupOptions.value.some((group) => group.value === id))
 )
 
 const selectCreateProvider = (provider: KeyGroupProvider) => {
@@ -1700,6 +1740,7 @@ const editKey = (key: ApiKey) => {
   formData.value = {
     name: key.name,
     group_id: key.group_id,
+    extra_group_ids: [...(key.extra_group_ids ?? [])],
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
@@ -1857,6 +1898,7 @@ const handleSubmit = async () => {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
+        extra_group_ids: submittedExtraGroupIds.value,
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1880,7 +1922,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        submittedExtraGroupIds.value
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1926,6 +1969,7 @@ const closeModals = () => {
   formData.value = {
     name: '',
     group_id: null,
+    extra_group_ids: [],
     status: 'active',
     use_custom_key: false,
     custom_key: '',

@@ -249,7 +249,7 @@ func TestCompositeCodexControlPathsUseResponsesRoutes(t *testing.T) {
 		"/v1/live",
 		"/backend-api/codex/realtime/calls",
 	} {
-		require.Equal(t, service.CompositeRouteEndpointResponses, compositeRouteEndpointForPath(path), "path=%s", path)
+		require.Equal(t, service.CompositeRouteEndpointResponses, service.CompositeRouteEndpointForPath(path), "path=%s", path)
 	}
 }
 

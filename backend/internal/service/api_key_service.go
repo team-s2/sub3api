@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/dgraph-io/ristretto"
+	gocache "github.com/patrickmn/go-cache"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -64,11 +65,13 @@ const (
 // 若编辑 Key 时无条件整行回写，并发累计的配额与限流计数就会被旧快照覆盖。
 // 因此调用方必须显式声明要改的列。
 type APIKeyUpdateFields struct {
-	Name      bool
-	Status    bool
-	Quota     bool
-	GroupID   bool
-	ExpiresAt bool
+	Name    bool
+	Status  bool
+	Quota   bool
+	GroupID bool
+	// ExtraGroupIDs 覆盖按模型路由的附加分组。
+	ExtraGroupIDs bool
+	ExpiresAt     bool
 	// QuotaUsed 仅供"重置配额用量"路径声明；常规计费走 IncrementQuotaUsed。
 	QuotaUsed bool
 	// RateLimits 覆盖 rate_limit_5h / _1d / _7d 三个阈值。
@@ -214,11 +217,12 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	Name          string   `json:"name"`
+	GroupID       *int64   `json:"group_id"`
+	ExtraGroupIDs []int64  `json:"extra_group_ids"` // 按模型路由的附加分组
+	CustomKey     *string  `json:"custom_key"`      // 可选的自定义key
+	IPWhitelist   []string `json:"ip_whitelist"`    // IP 白名单
+	IPBlacklist   []string `json:"ip_blacklist"`    // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -232,11 +236,12 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string   `json:"name"`
-	GroupID     *int64    `json:"group_id"`
-	Status      *string   `json:"status"`
-	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
-	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
+	Name          *string   `json:"name"`
+	GroupID       *int64    `json:"group_id"`
+	ExtraGroupIDs *[]int64  `json:"extra_group_ids"` // 按模型路由的附加分组（nil 不修改，空数组清空）
+	Status        *string   `json:"status"`
+	IPWhitelist   *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist   *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -314,6 +319,8 @@ type APIKeyService struct {
 	authInvalidationFailures  atomic.Uint64
 	lastUsedTouchL1           sync.Map // keyID -> nextAllowedAt(time.Time)
 	lastUsedTouchSF           singleflight.Group
+	compositeResolver         *CompositeRouteResolver
+	routeGroupCache           *gocache.Cache
 }
 
 type APIKeyAuthLookupMetrics struct {
@@ -353,6 +360,7 @@ func NewAPIKeyService(
 		userGroupRateRepo: userGroupRateRepo,
 		cache:             cache,
 		cfg:               cfg,
+		routeGroupCache:   gocache.New(apiKeyRouteGroupCacheTTL, 2*apiKeyRouteGroupCacheTTL),
 	}
 	svc.initAuthCache(cfg)
 	lookupConcurrency := defaultAuthLookupConcurrency
@@ -527,6 +535,10 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 			return nil, ErrGroupNotAllowed
 		}
 	}
+	extraGroupIDs, err := s.validateExtraGroups(ctx, user, req.GroupID, req.ExtraGroupIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	var key string
 
@@ -569,18 +581,19 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		UserID:        userID,
+		Key:           key,
+		Name:          html.EscapeString(req.Name),
+		GroupID:       req.GroupID,
+		ExtraGroupIDs: extraGroupIDs,
+		Status:        StatusActive,
+		IPWhitelist:   req.IPWhitelist,
+		IPBlacklist:   req.IPBlacklist,
+		Quota:         req.Quota,
+		QuotaUsed:     0,
+		RateLimit5h:   req.RateLimit5h,
+		RateLimit1d:   req.RateLimit1d,
+		RateLimit7d:   req.RateLimit7d,
 	}
 
 	// Set expiration time if specified
@@ -848,6 +861,22 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 		apiKey.GroupID = req.GroupID
 		fields.GroupID = true
+	}
+
+	if req.ExtraGroupIDs != nil {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
+		extraGroupIDs, err := s.validateExtraGroups(ctx, user, apiKey.GroupID, *req.ExtraGroupIDs)
+		if err != nil {
+			return nil, err
+		}
+		apiKey.ExtraGroupIDs = extraGroupIDs
+		fields.ExtraGroupIDs = true
+	} else if fields.GroupID {
+		apiKey.ExtraGroupIDs = normalizeExtraGroupIDs(apiKey.GroupID, apiKey.ExtraGroupIDs)
+		fields.ExtraGroupIDs = true
 	}
 
 	if req.Status != nil {

@@ -157,6 +157,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			AbortWithError(c, 401, "USER_INACTIVE", "User account is not active")
 			return
 		}
+		apiKey, ok := routeAPIKeyByRequestModel(c, apiKeyService, subscriptionService, apiKey)
+		if !ok {
+			return
+		}
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
 		}
