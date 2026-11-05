@@ -5,6 +5,12 @@ export default {
       createAccount: '添加账号',
       zcode: {
         menuEntry: 'ZCode OAuth 登录',
+        authMethod: '渠道认证方式',
+        authMethodApiKey: 'API Key',
+        authMethodOAuth: 'ZCode OAuth（登录建号）',
+        authMethodHint:
+          'ZCode OAuth 登录后自动复用/开通 CodingPlan Key，账号固定走 ultra 端点（官方 1.5x 配额口径），计费按账号正常倍率。',
+        oauthNotReady: '请先完成 ZCode 授权',
         title: '通过 ZCode OAuth 添加账号',
         intro:
           '用 Z.ai / BigModel 账号经 ZCode OAuth 登录，登录后自动复用或开通 CodingPlan 项目 Key，账号固定走 ultra 端点（官方 1.5x 配额口径），计费仍按账号正常倍率。',

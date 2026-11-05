@@ -463,13 +463,10 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    // 合并后的统一「渠道管理」页：账号(渠道)表格为主休，订阅/监控/定价以抽屉展开。
     path: '/admin/channels',
-    redirect: '/admin/channels/pricing'
-  },
-  {
-    path: '/admin/channels/pricing',
     name: 'AdminChannels',
-    component: () => import('@/views/admin/ChannelsView.vue'),
+    component: () => import('@/views/admin/AccountsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -478,17 +475,22 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.channels.description'
     }
   },
+  // 旧路径重定向：合并为单页后保留兼容（panel 参数直接打对应抽屉）。
+  {
+    path: '/admin/channels/pricing',
+    redirect: (to) => ({ path: '/admin/channels', query: { ...to.query, panel: 'pricing' } })
+  },
   {
     path: '/admin/channels/monitor',
-    name: 'AdminChannelMonitor',
-    component: () => import('@/views/admin/ChannelMonitorView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Channel Monitor',
-      titleKey: 'admin.channelMonitor.title',
-      descriptionKey: 'admin.channelMonitor.description'
-    }
+    redirect: (to) => ({ path: '/admin/channels', query: { ...to.query, panel: 'monitor' } })
+  },
+  {
+    path: '/admin/subscriptions',
+    redirect: (to) => ({ path: '/admin/channels', query: { ...to.query, panel: 'subscriptions' } })
+  },
+  {
+    path: '/admin/accounts',
+    redirect: '/admin/channels'
   },
   {
     path: '/monitor',
@@ -499,30 +501,6 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Channel Status',
       titleKey: 'nav.channelStatus'
-    }
-  },
-  {
-    path: '/admin/subscriptions',
-    name: 'AdminSubscriptions',
-    component: () => import('@/views/admin/SubscriptionsView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Subscription Management',
-      titleKey: 'admin.subscriptions.title',
-      descriptionKey: 'admin.subscriptions.description'
-    }
-  },
-  {
-    path: '/admin/accounts',
-    name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountsView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Account Management',
-      titleKey: 'admin.accounts.title',
-      descriptionKey: 'admin.accounts.description'
     }
   },
   {

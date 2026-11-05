@@ -597,7 +597,58 @@
       </div>
 
       <!-- Account Mode Selection (Kimi / Zhipu / DeepSeek) -->
-      <div v-if="isCNPlatform && !isOpenCodeGoPlatform">
+      <!-- 智谱：渠道认证方式（API Key / ZCode OAuth）。OAuth 选后页面直接完成登录并建号。 -->
+      <div v-if="form.platform === 'zhipu'" class="mt-4">
+        <label class="input-label">{{ t('admin.accounts.zcode.authMethod') }}</label>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg border px-3 py-2 text-sm transition-colors"
+            :class="
+              zhipuAuthMethod === 'api_key'
+                ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-500 dark:bg-primary-900/30 dark:text-primary-300'
+                : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:text-gray-200 dark:hover:bg-dark-700'
+            "
+            @click="zhipuAuthMethod = 'api_key'"
+          >
+            {{ t('admin.accounts.zcode.authMethodApiKey') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border px-3 py-2 text-sm transition-colors"
+            :class="
+              zhipuAuthMethod === 'oauth'
+                ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-500 dark:bg-primary-900/30 dark:text-primary-300'
+                : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:text-gray-200 dark:hover:bg-dark-700'
+            "
+            @click="zhipuAuthMethod = 'oauth'"
+          >
+            {{ t('admin.accounts.zcode.authMethodOAuth') }}
+          </button>
+        </div>
+        <p class="input-hint">{{ t('admin.accounts.zcode.authMethodHint') }}</p>
+      </div>
+
+      <!-- 智谱 OAuth：内联 ZCode 登录（站点选择 → 授权 → 轮询） -->
+      <div v-if="isZhipuOAuthMode" class="mt-4">
+        <ZCodeOAuthPanel ref="zcodePanelRef" :proxy-id="form.proxy_id" />
+        <label class="mt-3 flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-200">
+          <input v-model="zcodePeakPause" type="checkbox" class="mt-0.5 rounded" />
+          <span>{{ t('admin.accounts.zcode.peakPause') }}</span>
+        </label>
+        <div class="mt-3">
+          <label class="input-label">{{ t('admin.accounts.zcode.apiKey') }}</label>
+          <input
+            v-model="zcodeApiKeyOverride"
+            type="text"
+            class="input font-mono text-xs"
+            :placeholder="t('admin.accounts.zcode.apiKeyPlaceholder')"
+          />
+          <p class="input-hint">{{ t('admin.accounts.zcode.apiKeyAutoHint') }}</p>
+        </div>
+      </div>
+
+      <div v-if="isCNPlatform && !isOpenCodeGoPlatform && !isZhipuOAuthMode">
         <label class="input-label">{{ t('admin.accounts.cnProviders.accountMode.title') }}</label>
         <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-mode">
           <!-- Pay-as-you-go (token balance) -->
@@ -4126,6 +4177,7 @@ import {
   isValidWildcardPattern
 } from '@/composables/useModelWhitelist'
 import { adminAPI } from '@/api/admin'
+import ZCodeOAuthPanel from '@/components/account/ZCodeOAuthPanel.vue'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import {
   useAccountOAuth,
@@ -4400,6 +4452,13 @@ const upstreamBillingAutoProbeEnabled = ref(true)
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）账号类型、API 协议与端点 ──
 // 多协议供应商（国产厂商与走通用表单的供应商）的接入模式；OpenCode 用 openCodeAccountMode。
 const accountMode = ref<string>('payg')
+
+// 智谱渠道认证方式：API Key（现有逻辑）/ ZCode OAuth（用登录态直接建号，走 ultra 端点）。
+const zhipuAuthMethod = ref<'api_key' | 'oauth'>('api_key')
+const zcodeApiKeyOverride = ref('')
+const zcodePeakPause = ref(false)
+const zcodePanelRef = ref<{ state: string; status: string } | null>(null)
+const isZhipuOAuthMode = computed(() => form.platform === 'zhipu' && zhipuAuthMethod.value === 'oauth')
 const openCodeAccountMode = ref<OpenCodeAccountMode>('zen')
 // API 协议决定转发端点与格式：cc=现有转换链，anthropic=原生直通（Claude Code），
 // responses=deepseek / kimi 原生 Responses 端点（Codex）。与账号类型正交。
@@ -6097,6 +6156,41 @@ const handleSubmit = async () => {
       tier_id: 'vertex'
     }
     await createAccountAndFinish(form.platform, 'service_account' as AccountType, credentials)
+    return
+  }
+
+  // 智谱 OAuth 渠道：用 ZCode 登录态直接建号（后端落 ultra 端点，正常计费）。
+  if (isZhipuOAuthMode.value) {
+    const panel = zcodePanelRef.value
+    if (!panel || panel.status !== 'ready' || !panel.state) {
+      appStore.showError(t('admin.accounts.zcode.oauthNotReady'))
+      return
+    }
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    submitting.value = true
+    try {
+      await adminAPI.zcode.createAccount({
+        state: panel.state,
+        name: form.name.trim(),
+        notes: form.notes?.trim() || undefined,
+        api_key: zcodeApiKeyOverride.value.trim() || undefined,
+        peak_pause: zcodePeakPause.value,
+        proxy_id: form.proxy_id ?? null,
+        concurrency: form.concurrency > 0 ? form.concurrency : 1,
+        priority: form.priority ?? 0,
+        group_ids: form.group_ids?.length ? form.group_ids : undefined
+      })
+      appStore.showSuccess(t('admin.accounts.zcode.createSuccess'))
+      emit('created')
+      emit('close')
+    } catch (error: any) {
+      appStore.showError(error?.response?.data?.message || error?.message || String(error))
+    } finally {
+      submitting.value = false
+    }
     return
   }
 

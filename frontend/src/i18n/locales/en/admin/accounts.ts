@@ -5,6 +5,12 @@ export default {
       createAccount: 'Create Account',
       zcode: {
         menuEntry: 'ZCode OAuth Sign-in',
+        authMethod: 'Channel credential',
+        authMethodApiKey: 'API Key',
+        authMethodOAuth: 'ZCode OAuth (create by sign-in)',
+        authMethodHint:
+          'Signing in through ZCode OAuth reuses or provisions the CodingPlan key automatically; the account always routes to the ultra endpoint (official 1.5x quota) and is billed at its normal rate multiplier.',
+        oauthNotReady: 'Complete the ZCode authorization first',
         title: 'Add account via ZCode OAuth',
         intro:
           'Sign in with a Z.ai / BigModel account through ZCode OAuth. The CodingPlan project key is reused or provisioned automatically and the account always routes to the ultra endpoint (official 1.5x quota), while billing keeps the account rate multiplier.',

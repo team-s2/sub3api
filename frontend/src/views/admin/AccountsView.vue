@@ -88,13 +88,8 @@
                           {{ t('admin.accounts.dataActions') }}
                         </div>
                       </div>
-                      <button class="account-tools-menu-item" @click="openZCodeOAuth">
-                        <span class="account-tools-menu-icon bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300">
-                          <Icon name="key" size="sm" />
-                        </span>
-                        <span class="flex-1 text-left">{{ t('admin.accounts.zcode.menuEntry') }}</span>
-                      </button>
-                      <button class="account-tools-menu-item" @click="openSyncFromCrs">                        <span class="account-tools-menu-icon bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                      <button class="account-tools-menu-item" @click="openSyncFromCrs">
+                        <span class="account-tools-menu-icon bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
                           <Icon name="sync" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.accounts.syncFromCrs') }}</span>
@@ -163,6 +158,21 @@
                   </div>
                 </Teleport>
               </div>
+            </template>
+            <!-- 订阅套餐 / 渠道监控 / 渠道定价：合并到本页，以抽屉展示 -->
+            <template #beforeCreate>
+              <button type="button" class="btn btn-secondary" @click="openPanel('subscriptions')">
+                <Icon name="creditCard" size="sm" class="mr-1.5" />
+                {{ t('nav.subscriptions') }}
+              </button>
+              <button type="button" class="btn btn-secondary" @click="openPanel('monitor')">
+                <Icon name="chartBar" size="sm" class="mr-1.5" />
+                {{ t('nav.channelMonitor') }}
+              </button>
+              <button type="button" class="btn btn-secondary" @click="openPanel('pricing')">
+                <Icon name="dollar" size="sm" class="mr-1.5" />
+                {{ t('nav.channelPricing') }}
+              </button>
             </template>
           </AccountTableActions>
         </div>
@@ -460,7 +470,6 @@
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
-    <ZCodeOAuthModal :show="showZCodeOAuth" :proxies="proxies" :groups="groups" @close="showZCodeOAuth = false" @created="handleZCodeAccountCreated" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
@@ -492,11 +501,41 @@
     <ErrorPassthroughRulesModal :show="showErrorPassthrough" @close="showErrorPassthrough = false" />
     <TLSFingerprintProfilesModal :show="showTLSFingerprintProfiles" @close="showTLSFingerprintProfiles = false" />
     <TotpStepUpDialog :controller="accountExportStepUp" />
+
+    <!-- 订阅套餐：并入本页（不再单独分页），与渠道表格同屏显示，可折叠 -->
+    <section class="mt-6 min-h-0">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+          {{ t('nav.subscriptions') }}
+        </h2>
+        <button type="button" class="btn btn-secondary text-xs" @click="showSubscriptionsPanel = !showSubscriptionsPanel">
+          <Icon :name="showSubscriptionsPanel ? 'chevronUp' : 'chevronDown'" size="sm" />
+        </button>
+      </div>
+      <SubscriptionsView v-if="showSubscriptionsPanel" />
+    </section>
+    <BaseDialog
+      :show="showMonitorPanel"
+      :title="t('nav.channelMonitor')"
+      width="full"
+      @close="showMonitorPanel = false"
+    >
+      <ChannelMonitorView />
+    </BaseDialog>
+    <BaseDialog
+      :show="showPricingPanel"
+      :title="t('nav.channelPricing')"
+      width="full"
+      @close="showPricingPanel = false"
+    >
+      <ChannelsView />
+    </BaseDialog>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -509,12 +548,18 @@ import { useTableSelection } from '@/composables/useTableSelection'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal, ZCodeOAuthModal } from '@/components/account'
+import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
+
+// 面板：迁入抽屉的分页视图
+import SubscriptionsView from '@/views/admin/SubscriptionsView.vue'
+import ChannelMonitorView from '@/views/admin/ChannelMonitorView.vue'
+import ChannelsView from '@/views/admin/ChannelsView.vue'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
@@ -600,7 +645,33 @@ const selTypes = computed<AccountType[]>(() => {
   return [...types]
 })
 const showCreate = ref(false)
-const showZCodeOAuth = ref(false)
+
+// 合并后的「渠道管理」单页：订阅套餐 / 渠道监控 / 渠道定价改为抽屉。
+const showSubscriptionsPanel = ref(true)
+const showMonitorPanel = ref(false)
+const showPricingPanel = ref(false)
+
+const openPanel = (panel: 'subscriptions' | 'monitor' | 'pricing') => {
+  if (panel === 'subscriptions') {
+    showSubscriptionsPanel.value = true
+    return
+  }
+  showMonitorPanel.value = panel === 'monitor'
+  showPricingPanel.value = panel === 'pricing'
+}
+
+// 旧路径（/admin/subscriptions、/admin/channels/monitor|pricing）重定向过来会带 panel 参数，
+// 直接打开对应抽屉，保证旧链接/书签仍然直达目标。
+const route = useRoute()
+watch(
+  () => route.query.panel,
+  (panel) => {
+    if (panel === 'subscriptions' || panel === 'monitor' || panel === 'pricing') {
+      openPanel(panel)
+    }
+  },
+  { immediate: true }
+)
 const showEdit = ref(false)
 const showSync = ref(false)
 const showImportData = ref(false)
@@ -1208,17 +1279,6 @@ const reload = async () => {
   pendingTodayStatsRefresh.value = false
   await baseReload()
   await refreshTodayStatsBatch()
-}
-
-// ZCode（Z.ai / BigModel）OAuth 登录弹窗。
-const openZCodeOAuth = () => {
-  showAccountToolsDropdown.value = false
-  showZCodeOAuth.value = true
-}
-
-const handleZCodeAccountCreated = async () => {
-  appStore.showSuccess(t('admin.accounts.zcode.createSuccess'))
-  await reload()
 }
 
 const buildUpstreamBillingRateFilters = () => {
