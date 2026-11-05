@@ -470,12 +470,13 @@
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
+    <ZCodeResetCardsDialog :show="showZCodeResetCards" :account="resetCardsAccount" @close="showZCodeResetCards = false" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :anchor-rect="menu.anchorRect" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :anchor-rect="menu.anchorRect" @close="menu.show = false" @reset-cards="openZCodeResetCards" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -512,7 +513,7 @@
           <Icon :name="showSubscriptionsPanel ? 'chevronUp' : 'chevronDown'" size="sm" />
         </button>
       </div>
-      <SubscriptionsView v-if="showSubscriptionsPanel" />
+      <SubscriptionCards v-if="showSubscriptionsPanel" />
     </section>
     <BaseDialog
       :show="showMonitorPanel"
@@ -556,10 +557,11 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 
-// 面板：迁入抽屉的分页视图
-import SubscriptionsView from '@/views/admin/SubscriptionsView.vue'
+// 面板：迁入本页的分页视图
 import ChannelMonitorView from '@/views/admin/ChannelMonitorView.vue'
 import ChannelsView from '@/views/admin/ChannelsView.vue'
+import SubscriptionCards from '@/components/admin/subscription/SubscriptionCards.vue'
+import ZCodeResetCardsDialog from '@/components/account/ZCodeResetCardsDialog.vue'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
@@ -650,6 +652,15 @@ const showCreate = ref(false)
 const showSubscriptionsPanel = ref(true)
 const showMonitorPanel = ref(false)
 const showPricingPanel = ref(false)
+
+const showZCodeResetCards = ref(false)
+const resetCardsAccount = ref<Account | null>(null)
+
+const openZCodeResetCards = (account: Account) => {
+  resetCardsAccount.value = account
+  menu.show = false
+  showZCodeResetCards.value = true
+}
 
 const openPanel = (panel: 'subscriptions' | 'monitor' | 'pricing') => {
   if (panel === 'subscriptions') {

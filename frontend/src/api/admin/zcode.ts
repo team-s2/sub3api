@@ -86,9 +86,47 @@ export async function createAccount(payload: ZCodeCreateAccountRequest): Promise
   return data
 }
 
+export interface ZCodeResetCard {
+  type: string
+  expires_at: string
+}
+
+export interface ZCodeResetInventory {
+  cards: ZCodeResetCard[] | null
+  observed_at: string
+}
+
+/** 重置卡库存（force=true 时强制向 ZCode 拉取最新）。 */
+export async function getResetCards(accountId: number, force = false): Promise<ZCodeResetInventory> {
+  const { data } = await apiClient.get<ZCodeResetInventory>(
+    `/admin/zcode/accounts/${accountId}/reset-cards${force ? '?force=true' : ''}`
+  )
+  return data
+}
+
+/** 立即使用一张重置卡（reset_type: 5h | week）。 */
+export async function useResetCard(accountId: number, resetType: string): Promise<ZCodeResetInventory> {
+  const { data } = await apiClient.post<ZCodeResetInventory>(`/admin/zcode/accounts/${accountId}/reset`, {
+    reset_type: resetType
+  })
+  return data
+}
+
+/** 修改自动领卡 / 峰时暂停设置。 */
+export async function updateSettings(
+  accountId: number,
+  payload: { peak_pause?: boolean; auto_claim?: boolean }
+): Promise<unknown> {
+  const { data } = await apiClient.put<unknown>(`/admin/zcode/accounts/${accountId}/settings`, payload)
+  return data
+}
+
 export default {
   getSites,
   generateAuthUrl,
   poll,
-  createAccount
+  createAccount,
+  getResetCards,
+  useResetCard,
+  updateSettings
 }
