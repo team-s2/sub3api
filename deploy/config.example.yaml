@@ -1186,6 +1186,33 @@ billing:
     fail_closed_on_unpriced: false
 
 # =============================================================================
+# OneBot Chat Bot
+# OneBot 聊天机器人（NapCat 等通过反向 WebSocket 连入）
+# =============================================================================
+onebot:
+  # Enable the bot
+  # 启用机器人
+  enabled: false
+  # Reverse WebSocket path
+  # 反向 WebSocket 路径
+  path: "/onebot/v11/ws"
+  # Bot QQ number, required when enabled
+  # 机器人 QQ 号，启用时必填
+  self_id: ""
+  # Bearer token of the connection, required when enabled
+  # 连接使用的 Bearer token，启用时必填
+  token: ""
+  # Commands look like /sub3api quota
+  # 命令形如 /sub3api quota
+  command_prefix: "sub3api"
+  # Every member of these groups can run commands
+  # 这些群的所有成员都可以执行命令
+  allowed_groups: []
+  # These users can run commands in private chat
+  # 这些用户可以在私聊中执行命令
+  allowed_users: []
+
+# =============================================================================
 # Turnstile Configuration
 # Turnstile 人机验证配置
 # =============================================================================

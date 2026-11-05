@@ -65,8 +65,21 @@ const DefaultUpstreamResponseReadMaxBytes int64 = 128 * 1024 * 1024
 // 可通过 gateway.models_list_read_max_bytes 配置项覆盖。
 const DefaultModelsListReadMaxBytes int64 = 8 * 1024 * 1024
 
+// OneBotConfig enables the chat bot over a OneBot 11 reverse WebSocket. Only the
+// listed groups and private users can run commands.
+type OneBotConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`
+	Path          string   `mapstructure:"path"`
+	SelfID        string   `mapstructure:"self_id"`
+	Token         string   `mapstructure:"token"`
+	CommandPrefix string   `mapstructure:"command_prefix"`
+	AllowedGroups []string `mapstructure:"allowed_groups"`
+	AllowedUsers  []string `mapstructure:"allowed_users"`
+}
+
 type Config struct {
 	Server                  ServerConfig                  `mapstructure:"server"`
+	OneBot                  OneBotConfig                  `mapstructure:"onebot"`
 	Log                     LogConfig                     `mapstructure:"log"`
 	CORS                    CORSConfig                    `mapstructure:"cors"`
 	Security                SecurityConfig                `mapstructure:"security"`
@@ -2144,6 +2157,15 @@ func setDefaults() {
 
 	// Turnstile
 	viper.SetDefault("turnstile.required", false)
+
+	// OneBot chat bot
+	viper.SetDefault("onebot.enabled", false)
+	viper.SetDefault("onebot.path", "/onebot/v11/ws")
+	viper.SetDefault("onebot.self_id", "")
+	viper.SetDefault("onebot.token", "")
+	viper.SetDefault("onebot.command_prefix", "sub3api")
+	viper.SetDefault("onebot.allowed_groups", []string{})
+	viper.SetDefault("onebot.allowed_users", []string{})
 
 	// LinuxDo Connect OAuth 登录
 	viper.SetDefault("linuxdo_connect.enabled", false)
